@@ -168,6 +168,28 @@ body {
 .v-action-full .v-action-ico { font-size: 18px; }
 .v-action-full .v-action-txt { font-size: 15px; font-weight: 700; color: var(--blue); }
 
+/* ── Prochain entretien banner ────────────── */
+.next-service-banner {
+  margin: 0 16px 16px;
+  border-radius: 14px; overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex; align-items: center; gap: 14px;
+  padding: 13px 16px;
+}
+.next-service-banner.ok     { border-color: var(--green);  background: var(--green-dim); }
+.next-service-banner.soon   { border-color: var(--yellow); background: rgba(251,191,36,0.1); }
+.next-service-banner.overdue{ border-color: var(--red);    background: var(--red-dim); }
+.nsb-ico { font-size: 26px; flex-shrink: 0; }
+.nsb-body { flex: 1; min-width: 0; }
+.nsb-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted2); margin-bottom: 2px; }
+.nsb-main  { font-size: 14px; font-weight: 700; }
+.nsb-main.ok      { color: var(--green); }
+.nsb-main.soon    { color: var(--yellow); }
+.nsb-main.overdue { color: var(--red); }
+.nsb-sub   { font-size: 11px; color: var(--muted2); margin-top: 2px; font-family: var(--mono); }
+.nsb-no-interval { font-size: 13px; color: var(--muted); font-style: italic; }
+
 /* ── Timeline / History ───────────────────── */
 .timeline-header { padding: 0 20px 12px; display: flex; justify-content: space-between; align-items: center; }
 .timeline-title { font-size: 15px; font-weight: 700; }
@@ -219,7 +241,7 @@ body {
 .t-cost { font-size: 14px; font-weight: 700; color: var(--blue); flex-shrink: 0; font-family: var(--mono); }
 .t-cost.free { color: var(--green); }
 .t-cost.fuel { color: var(--teal); }
-.t-meta { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+.t-meta { font-size: 11px; color: var(--muted2); margin-top: 4px; font-family: var(--mono); }
 .t-provider { display: inline-block; margin-left: 8px; color: var(--muted2); }
 .t-fuel-chips { display: flex; gap: 5px; margin-top: 5px; }
 .fuel-chip {

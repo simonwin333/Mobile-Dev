@@ -1,16 +1,11 @@
 /**
- * db.js — Couche données Mobile Dev
+ * db.js — Couche données Mobile Dev v3
  *
- * ARCHITECTURE FIREBASE-READY :
- * Toute la logique de données passe par ce fichier.
- * Pour migrer vers Firebase, remplacer les fonctions ci-dessous
- * par des appels Firestore — le reste de l'app ne change pas.
- *
- * Véhicule : { id, name, brand, model, year, fuel, licensePlate, mileage,
- *              purchaseDate, purchaseMileage, purchasePrice, photo, color, notes, createdAt }
- * Entrée   : { id, vehicleId, date, mileage, type, description, cost,
- *              provider, invoice, notes, createdAt }
- * Entrée carburant : idem + { liters } (litres saisis)
+ * ARCHITECTURE FIREBASE-READY
+ * Nouveautés v3 :
+ * - Véhicule : champ serviceInterval (km entre 2 entretiens)
+ * - Entrée carburant historique 308 SW (7 986€ / 72 000 km)
+ * - Couleur véhicule fixe par défaut (pas de sélecteur UI)
  */
 
 const DB_VEHICLES_KEY = 'mobiledev_vehicles';
@@ -20,19 +15,14 @@ function _load(key) {
   try { return JSON.parse(localStorage.getItem(key)) || []; }
   catch { return []; }
 }
-function _save(key, data) {
-  localStorage.setItem(key, JSON.stringify(data));
-}
-function _genId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
+function _save(key, data) { localStorage.setItem(key, JSON.stringify(data)); }
+function _genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
 const DB = {
 
   // ─── VÉHICULES ──────────────────────────────
 
   getVehicles() { return _load(DB_VEHICLES_KEY); },
-
   getVehicle(id) { return this.getVehicles().find(v => v.id === id) || null; },
 
   createVehicle(data) {
@@ -94,7 +84,7 @@ const DB = {
   },
 
   // ─── STATS ──────────────────────────────────
-  // Coût/km = (frais hors carbu + carburant + prix achat) ÷ km parcourus
+  // Coût/km = (frais + carburant + prix achat) ÷ km parcourus
 
   getVehicleStats(vehicleId) {
     const vehicle = this.getVehicle(vehicleId);
@@ -104,14 +94,28 @@ const DB = {
     const fuelEntries  = entries.filter(e => e.type === 'carburant');
     const otherEntries = entries.filter(e => e.type !== 'carburant');
 
-    const totalFuel   = fuelEntries.reduce((s, e)  => s + (parseFloat(e.cost)   || 0), 0);
-    const totalOther  = otherEntries.reduce((s, e) => s + (parseFloat(e.cost)   || 0), 0);
-    const totalLiters = fuelEntries.reduce((s, e)  => s + (parseFloat(e.liters) || 0), 0);
+    const totalFuel    = fuelEntries.reduce((s, e)  => s + (parseFloat(e.cost)   || 0), 0);
+    const totalOther   = otherEntries.reduce((s, e) => s + (parseFloat(e.cost)   || 0), 0);
+    const totalLiters  = fuelEntries.reduce((s, e)  => s + (parseFloat(e.liters) || 0), 0);
     const purchasePrice = parseFloat(vehicle.purchasePrice) || 0;
     const totalAllInclPurchase = totalOther + totalFuel + purchasePrice;
 
-    const kmDriven = Math.max(0, (vehicle.mileage || 0) - (parseFloat(vehicle.purchaseMileage) || 0));
+    const kmDriven  = Math.max(0, (vehicle.mileage || 0) - (parseFloat(vehicle.purchaseMileage) || 0));
     const costPerKm = kmDriven > 0 ? totalAllInclPurchase / kmDriven : 0;
+
+    // Dernier entretien (type entretien, date la plus récente)
+    const serviceEntries = otherEntries
+      .filter(e => e.type === 'entretien')
+      .sort((a, b) => (b.mileage || 0) - (a.mileage || 0));
+    const lastService = serviceEntries[0] || null;
+
+    // Prochain entretien
+    let nextService = null;
+    if (lastService && vehicle.serviceInterval) {
+      const nextKm = (lastService.mileage || 0) + parseInt(vehicle.serviceInterval);
+      const remaining = nextKm - (vehicle.mileage || 0);
+      nextService = { nextKm, remaining, lastKm: lastService.mileage, lastDate: lastService.date };
+    }
 
     const byYear = {};
     entries.forEach(e => {
@@ -127,6 +131,7 @@ const DB = {
     return {
       totalOther, totalFuel, totalLiters, purchasePrice,
       totalAllInclPurchase, kmDriven, costPerKm,
+      lastService, nextService,
       byYear, byType,
       entryCount: entries.length,
       fuelCount:  fuelEntries.length,
@@ -137,7 +142,7 @@ const DB = {
 
   _syncVehicleMileage(vehicleId) {
     const entries = this.getEntries(vehicleId);
-    if (entries.length === 0) return;
+    if (!entries.length) return;
     const maxMileage = Math.max(...entries.map(e => parseInt(e.mileage) || 0));
     const vehicle = this.getVehicle(vehicleId);
     if (vehicle && maxMileage > (vehicle.mileage || 0)) {
@@ -155,10 +160,14 @@ const DB = {
       year:2019, fuel:'Essence', licensePlate:'',
       mileage:109800, purchaseMileage:42500,
       purchaseDate:'2022-08-13', purchasePrice:21780,
-      color:'#4d8eff', photo:null, notes:''
+      color:'#4d8eff', photo:null, notes:'',
+      serviceInterval: 15000, // km entre 2 entretiens
     });
 
     [
+      // Carburant historique global 2022-2025
+      { date:'2022-08-13', mileage:42500, type:'carburant', description:'Carburant historique 2022–2025', cost:7986, liters:0, provider:'' },
+      // Frais
       { date:'2022-08-13', mileage:42500, type:'achat',      description:'Taxe mise en circulation',                        cost:495,  provider:'Taxe',           invoice:'' },
       { date:'2022-08-13', mileage:42500, type:'assurance',  description:'Assurance annuelle',                              cost:320,  provider:'Yuzzu',          invoice:'' },
       { date:'2023-03-29', mileage:43000, type:'reparation', description:'Cosse électrique mal serrée (garantie)',           cost:0,    provider:'VDC Mouscron',   invoice:'' },
@@ -185,7 +194,7 @@ const DB = {
       { date:'2025-12-04', mileage:109800,type:'entretien',  description:'Petit entretien (disques + plaquettes AV)',       cost:579,  provider:'VDC Peruwelz',   invoice:'' },
     ].forEach(e => this.createEntry({ vehicleId: v1.id, ...e }));
 
-    this.createVehicle({ name:'Voiture 2', brand:'', model:'', year:null, fuel:'', licensePlate:'', mileage:0, purchaseMileage:0, purchaseDate:'', purchasePrice:0, color:'#20d070', photo:null, notes:'À compléter' });
-    this.createVehicle({ name:'Moto', brand:'', model:'', year:null, fuel:'', licensePlate:'', mileage:0, purchaseMileage:0, purchaseDate:'', purchasePrice:0, color:'#ff7043', photo:null, notes:'À compléter' });
+    this.createVehicle({ name:'Voiture 2', brand:'', model:'', year:null, fuel:'', licensePlate:'', mileage:0, purchaseMileage:0, purchaseDate:'', purchasePrice:0, color:'#20d070', photo:null, notes:'À compléter', serviceInterval:'' });
+    this.createVehicle({ name:'Moto',      brand:'', model:'', year:null, fuel:'', licensePlate:'', mileage:0, purchaseMileage:0, purchaseDate:'', purchasePrice:0, color:'#ff7043', photo:null, notes:'À compléter', serviceInterval:'' });
   }
 };

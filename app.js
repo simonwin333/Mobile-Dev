@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════
-   Mobile Dev — app.js v2
+   Mobile Dev — app.js v3
 ═══════════════════════════════════════════════ */
 
 // ─── STATE ──────────────────────────────────
@@ -11,17 +11,18 @@ const State = {
   editingVehicleId: null,
 };
 
-// ─── TYPES ──────────────────────────────────
+// ─── TYPES ─────────────────────────────────
+// Carburant en 2e position pour être juste après "Tous" dans les filtres
 const TYPES = {
-  entretien:  { label:'Entretien',  ico:'🔧', color:'blue'    },
-  reparation: { label:'Réparation', ico:'🛠️',  color:'orange'  },
-  assurance:  { label:'Assurance',  ico:'📄', color:'green'   },
-  taxe:       { label:'Taxe',       ico:'🏛️',  color:'purple'  },
-  controle:   { label:'Contrôle',   ico:'✅', color:'yellow'  },
-  pneus:      { label:'Pneus',      ico:'⚫', color:'muted'   },
-  carburant:  { label:'Carburant',  ico:'⛽', color:'teal'    },
-  achat:      { label:'Achat',      ico:'🛒', color:'red'     },
-  autre:      { label:'Autre',      ico:'📌', color:'muted'   },
+  entretien:  { label:'Entretien',  ico:'🔧', color:'blue'   },
+  carburant:  { label:'Carburant',  ico:'⛽', color:'teal'   },
+  reparation: { label:'Réparation', ico:'🛠️',  color:'orange' },
+  assurance:  { label:'Assurance',  ico:'📄', color:'green'  },
+  taxe:       { label:'Taxe',       ico:'🏛️',  color:'purple' },
+  controle:   { label:'Contrôle',   ico:'✅', color:'yellow' },
+  pneus:      { label:'Pneus',      ico:'⚫', color:'muted'  },
+  achat:      { label:'Achat',      ico:'🛒', color:'red'    },
+  autre:      { label:'Autre',      ico:'📌', color:'muted'  },
 };
 
 const COLORS = ['#4d8eff','#20d070','#ff7043','#a78bfa','#fbbf24','#ff4757','#00cec9','#fd79a8'];
@@ -67,7 +68,7 @@ function renderHome() {
     State.activeVehicleId = vehicles[0]?.id || null;
   }
 
-  // Pills — ① pas de pill "+ Ajouter"
+  // Pills — sans pill "+ Ajouter"
   const pillsWrap = document.getElementById('home-pills');
   pillsWrap.innerHTML = '';
   vehicles.forEach(v => {
@@ -82,18 +83,20 @@ function renderHome() {
   if (!vehicle) {
     document.getElementById('home-panel').innerHTML =
       `<div class="empty-state"><div class="empty-ico">🚗</div><p>Aucun véhicule.<br>Rendez-vous dans <b>Garage</b> pour en ajouter un.</p></div>`;
+    document.getElementById('home-next-service').innerHTML = '';
     document.getElementById('home-recent').innerHTML = '';
     return;
   }
   renderVehiclePanel(vehicle);
+  renderNextService(vehicle);
   renderRecentEntries(vehicle);
 }
 
 function renderVehiclePanel(vehicle) {
-  const stats  = DB.getVehicleStats(vehicle.id);
-  const panel  = document.getElementById('home-panel');
+  const stats   = DB.getVehicleStats(vehicle.id);
+  const panel   = document.getElementById('home-panel');
   const hasPhoto = !!vehicle.photo;
-  const heroBg = hasPhoto
+  const heroBg  = hasPhoto
     ? `background-image:url('${vehicle.photo}');background-size:cover;background-position:center;`
     : '';
   const glow = `radial-gradient(circle at 70% 50%, ${vehicle.color||'#4d8eff'}28 0%, transparent 65%)`;
@@ -107,11 +110,8 @@ function renderVehiclePanel(vehicle) {
         <div class="v-hero-emoji">🚗</div>
         <div class="v-hero-name">${vehicle.brand?vehicle.brand+' ':''}${vehicle.name}</div>
         <div class="v-hero-sub">${[vehicle.model,vehicle.year,vehicle.fuel].filter(Boolean).join(' · ')}</div>
-        <!-- ② Bouton 📷 discret coin inférieur droit -->
         <div class="v-hero-photo-fab" onclick="triggerPhotoUpload('${vehicle.id}')" title="Changer la photo">📷</div>
       </div>
-
-      <!-- ③ 4 stats : km · coût/km (tout incl.) · frais hors carbu · carburant -->
       <div class="v-stats-grid">
         <div class="v-stat">
           <div class="v-stat-val">${vehicle.mileage ? fmt(vehicle.mileage) : '—'}</div>
@@ -127,16 +127,73 @@ function renderVehiclePanel(vehicle) {
         </div>
         <div class="v-stat">
           <div class="v-stat-val fuel">${stats ? fmtEur(stats.totalFuel) : '—'}</div>
-          <div class="v-stat-lbl">carburant total${stats?.totalLiters?' ('+Math.round(stats.totalLiters)+' L)':''}</div>
+          <div class="v-stat-lbl">carburant total</div>
         </div>
       </div>
-
-      <!-- ④⑤ Bouton pleine largeur, plus de bouton "Modifier véhicule" -->
-      <div class="v-action-full" onclick="openEntryForm()">
-        <span class="v-action-ico">➕</span>
-        <span class="v-action-txt">Ajouter une entrée</span>
-      </div>
     </div>`;
+}
+
+// ── Bannière prochain entretien ──────────────
+function renderNextService(vehicle) {
+  const stats = DB.getVehicleStats(vehicle.id);
+  const wrap  = document.getElementById('home-next-service');
+
+  // Bouton ajouter entrée (toujours présent, au-dessus ou en-dessous de la bannière)
+  const addBtn = `<div class="v-action-full" onclick="openEntryForm()" style="margin:0 16px 16px;border-radius:14px;border:1px solid var(--border)">
+    <span class="v-action-ico">➕</span>
+    <span class="v-action-txt">Ajouter une entrée</span>
+  </div>`;
+
+  if (!vehicle.serviceInterval) {
+    // Pas d'intervalle configuré
+    wrap.innerHTML = `
+      <div class="next-service-banner" onclick="openVehicleForm('${vehicle.id}')">
+        <div class="nsb-ico">🔧</div>
+        <div class="nsb-body">
+          <div class="nsb-label">Prochain entretien</div>
+          <div class="nsb-no-interval">Définir l'intervalle dans la fiche véhicule →</div>
+        </div>
+      </div>
+      ${addBtn}`;
+    return;
+  }
+
+  const ns = stats?.nextService;
+  if (!ns) {
+    wrap.innerHTML = `
+      <div class="next-service-banner">
+        <div class="nsb-ico">🔧</div>
+        <div class="nsb-body">
+          <div class="nsb-label">Prochain entretien</div>
+          <div class="nsb-no-interval">Aucun entretien enregistré</div>
+        </div>
+      </div>
+      ${addBtn}`;
+    return;
+  }
+
+  let statusClass, ico, mainTxt;
+  if (ns.remaining <= 0) {
+    statusClass = 'overdue'; ico = '🚨';
+    mainTxt = `Dépassé de ${fmt(Math.abs(ns.remaining))} km !`;
+  } else if (ns.remaining <= 2000) {
+    statusClass = 'soon'; ico = '⚠️';
+    mainTxt = `Dans ${fmt(ns.remaining)} km`;
+  } else {
+    statusClass = 'ok'; ico = '✅';
+    mainTxt = `Dans ${fmt(ns.remaining)} km`;
+  }
+
+  wrap.innerHTML = `
+    <div class="next-service-banner ${statusClass}">
+      <div class="nsb-ico">${ico}</div>
+      <div class="nsb-body">
+        <div class="nsb-label">Prochain entretien</div>
+        <div class="nsb-main ${statusClass}">${mainTxt}</div>
+        <div class="nsb-sub">Prévu à ${fmt(ns.nextKm)} km · Dernier à ${fmt(ns.lastKm)} km (${fmtDate(ns.lastDate)})</div>
+      </div>
+    </div>
+    ${addBtn}`;
 }
 
 function renderRecentEntries(vehicle) {
@@ -153,7 +210,6 @@ function renderRecentEntries(vehicle) {
   }
   const tl = document.createElement('div');
   tl.className = 'timeline';
-  // Sur home : pas de boutons modifier/supprimer, juste clic pour ouvrir form
   entries.forEach(e => tl.appendChild(buildEntryEl(e, false)));
   wrap.appendChild(tl);
 }
@@ -175,6 +231,7 @@ function renderHistory() {
     pillsWrap.appendChild(pill);
   });
 
+  // Filtres — Carburant en 2e position juste après "Tous"
   const filterBar = document.getElementById('history-filters');
   filterBar.innerHTML = '';
   [{ key:'all', label:'Tous' }, ...Object.entries(TYPES).map(([k,t]) => ({ key:k, label:t.label }))]
@@ -194,7 +251,10 @@ function renderHistory() {
   let entries = DB.getEntries(vehicle.id).sort((a,b) => new Date(b.date) - new Date(a.date));
   if (State.historyFilter !== 'all') entries = entries.filter(e => e.type === State.historyFilter);
 
-  if (!entries.length) { wrap.innerHTML = '<div class="empty-state"><div class="empty-ico">📭</div><p>Aucune entrée</p></div>'; return; }
+  if (!entries.length) {
+    wrap.innerHTML = '<div class="empty-state"><div class="empty-ico">📭</div><p>Aucune entrée</p></div>';
+    return;
+  }
 
   const byYear = {};
   entries.forEach(e => {
@@ -210,27 +270,30 @@ function renderHistory() {
     badge.className = 'year-badge';
     badge.innerHTML = `<span class="year-badge-txt">${year}</span><div class="year-badge-line"></div>`;
     tl.appendChild(badge);
-    // ⑩ Dans historique : afficher les boutons modifier/supprimer
     byYear[year].forEach(e => tl.appendChild(buildEntryEl(e, true)));
   });
   wrap.appendChild(tl);
 }
 
 // ─── BUILD ENTRY ELEMENT ────────────────────
-// showActions=true → affiche les boutons modifier/supprimer (⑩)
 function buildEntryEl(entry, showActions) {
   const t = TYPES[entry.type] || TYPES.autre;
   const el = document.createElement('div');
   el.className = 't-entry';
-  const isFuel = entry.type === 'carburant';
+  const isFuel  = entry.type === 'carburant';
   const costFree = !entry.cost || parseFloat(entry.cost) === 0;
   const costClass = isFuel ? 'fuel' : costFree ? 'free' : '';
-  const costTxt = costFree && !isFuel ? 'Gratuit' : fmtEur(entry.cost);
+  const costTxt   = costFree && !isFuel ? 'Gratuit' : fmtEur(entry.cost);
+
+  // Prix/litre calculé discrètement si données disponibles
+  const ppl = (isFuel && entry.liters && entry.cost)
+    ? (parseFloat(entry.cost) / parseFloat(entry.liters)).toFixed(3) + '€/L'
+    : null;
 
   const fuelChips = isFuel
     ? `<div class="t-fuel-chips">
         ${entry.liters ? `<div class="fuel-chip">${entry.liters} L</div>` : ''}
-        ${entry.liters && entry.cost ? `<div class="fuel-chip">${(entry.cost / entry.liters).toFixed(3)}€/L</div>` : ''}
+        ${ppl ? `<div class="fuel-chip">${ppl}</div>` : ''}
        </div>`
     : '';
 
@@ -250,8 +313,7 @@ function buildEntryEl(entry, showActions) {
           <div class="t-cost ${costClass}">${costTxt}</div>
         </div>
         <div class="t-meta">
-          ${fmtDate(entry.date)}${entry.mileage ? ' · '+fmt(entry.mileage)+' km' : ''}
-          ${entry.provider ? `<span class="t-provider">· ${entry.provider}</span>` : ''}
+          ${fmtDate(entry.date)}${entry.mileage ? ' · '+fmt(entry.mileage)+' km' : ''}${entry.provider ? ' · '+entry.provider : ''}
         </div>
         ${fuelChips}
       </div>
@@ -267,9 +329,9 @@ function renderGarage() {
   wrap.innerHTML = '';
 
   vehicles.forEach(v => {
-    const stats  = DB.getVehicleStats(v.id);
+    const stats   = DB.getVehicleStats(v.id);
     const hasPhoto = !!v.photo;
-    const heroBg = hasPhoto
+    const heroBg  = hasPhoto
       ? `background-image:url('${v.photo}');background-size:cover;background-position:center;`
       : `background:linear-gradient(135deg,${v.color||'#1a3366'}22,${v.color||'#4d8eff'}44);`;
 
@@ -296,7 +358,6 @@ function renderGarage() {
             <div class="gcs-lbl">Entrées</div>
           </div>
         </div>
-        <!-- ⑨ Boutons Détail / Modifier / Supprimer -->
         <div class="garage-card-actions">
           <div class="gc-btn gc-btn-detail" onclick="garageDetail('${v.id}')">📋 Détail</div>
           <div class="gc-btn gc-btn-edit"   onclick="openVehicleForm('${v.id}')">✏️ Modifier</div>
@@ -306,7 +367,6 @@ function renderGarage() {
     wrap.appendChild(card);
   });
 
-  // ⑨ Bouton "Ajouter un véhicule"
   const addCard = document.createElement('div');
   addCard.className = 'garage-add-card';
   addCard.innerHTML = `<div class="garage-add-ico">➕</div><div class="garage-add-lbl">Ajouter un véhicule</div>`;
@@ -473,25 +533,24 @@ function openEntryForm(entryId = null) {
       </div>
     </div>
 
-    <!-- Section carburant — visible seulement si type=carburant -->
     <div id="fuel-section" style="display:${selType==='carburant'?'block':'none'}">
       <div class="fuel-form-section">
         <div class="fuel-section-title">⛽ Détails du plein</div>
         <div class="form-row">
           <div class="form-group" style="margin-bottom:0">
             <label class="form-label">Litres</label>
-            <input class="form-input" type="number" id="ef-liters" step="0.01" placeholder="ex: 45.5" value="${entry?.liters||''}" oninput="updatePricePerLiter()">
+            <input class="form-input" type="number" id="ef-liters" step="0.01" placeholder="ex: 45.5"
+              value="${entry?.liters||''}" oninput="updatePricePerLiter()">
           </div>
           <div class="form-group" style="margin-bottom:0">
             <label class="form-label">Montant (€)</label>
-            <input class="form-input" type="number" id="ef-fuel-cost" step="0.01" placeholder="ex: 72.00" value="${entry?.cost||''}" oninput="syncFuelCost(); updatePricePerLiter()">
+            <input class="form-input" type="number" id="ef-fuel-cost" step="0.01" placeholder="ex: 72.00"
+              value="${entry?.type==='carburant'?entry?.cost||'':''}" oninput="updatePricePerLiter()">
           </div>
         </div>
         <div class="form-group" style="margin-top:10px;margin-bottom:0">
-          <label class="form-label">Prix / litre <span style="color:var(--teal);font-style:italic;text-transform:none">(calculé)</span></label>
-          <div class="price-per-liter-display" id="price-per-liter">
-            <span>—</span><span>automatique</span>
-          </div>
+          <label class="form-label">Prix / litre <span style="color:var(--teal);font-style:italic;text-transform:none">(calculé auto)</span></label>
+          <div class="price-per-liter-display" id="price-per-liter"><span>—</span><span>automatique</span></div>
         </div>
       </div>
     </div>
@@ -503,21 +562,23 @@ function openEntryForm(entryId = null) {
         value="${entry?.description||''}">
     </div>
 
-    <!-- Coût général — caché si carburant car saisi dans fuel-section -->
     <div id="ef-cost-group" style="display:${selType==='carburant'?'none':'block'}">
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Coût (€)</label>
-          <input class="form-input" type="number" id="ef-cost" step="0.01" placeholder="0" value="${entry?.type!=='carburant'?entry?.cost??'':''}">
+          <input class="form-input" type="number" id="ef-cost" step="0.01" placeholder="0"
+            value="${entry?.type!=='carburant'?entry?.cost??'':''}">
         </div>
         <div class="form-group">
           <label class="form-label">Fournisseur</label>
-          <input class="form-input" type="text" id="ef-provider" placeholder="ex: VDC Peruwelz" value="${entry?.provider||''}">
+          <input class="form-input" type="text" id="ef-provider" placeholder="ex: VDC Peruwelz"
+            value="${entry?.provider||''}">
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Facture / Référence</label>
-        <input class="form-input" type="text" id="ef-invoice" placeholder="Numéro facture" value="${entry?.invoice||''}">
+        <input class="form-input" type="text" id="ef-invoice" placeholder="Numéro facture"
+          value="${entry?.invoice||''}">
       </div>
     </div>
 
@@ -536,15 +597,12 @@ function openEntryForm(entryId = null) {
 }
 
 window.selectType = function(el, type) {
-  document.querySelectorAll('#entry-modal-body .type-btn').forEach(b => {
-    b.classList.remove('selected', 'selected-fuel');
-  });
+  document.querySelectorAll('#entry-modal-body .type-btn').forEach(b => b.classList.remove('selected','selected-fuel'));
   el.classList.add(type === 'carburant' ? 'selected-fuel' : 'selected');
   document.getElementById('ef-type').value = type;
-
   const isFuel = type === 'carburant';
-  document.getElementById('fuel-section').style.display    = isFuel ? 'block' : 'none';
-  document.getElementById('ef-cost-group').style.display   = isFuel ? 'none'  : 'block';
+  document.getElementById('fuel-section').style.display  = isFuel ? 'block' : 'none';
+  document.getElementById('ef-cost-group').style.display = isFuel ? 'none'  : 'block';
   const descLbl = document.querySelector('#ef-desc-group .form-label');
   const descInp = document.getElementById('ef-desc');
   descLbl.textContent = isFuel ? 'Station / Notes' : 'Description';
@@ -562,37 +620,30 @@ window.updatePricePerLiter = function() {
   const cost   = parseFloat(document.getElementById('ef-fuel-cost')?.value) || 0;
   const el     = document.getElementById('price-per-liter');
   if (!el) return;
-  if (liters > 0 && cost > 0) {
-    el.innerHTML = `<strong style="color:var(--teal);font-size:17px">${(cost/liters).toFixed(3)}€/L</strong><span>automatique</span>`;
-  } else {
-    el.innerHTML = `<span>—</span><span>automatique</span>`;
-  }
+  el.innerHTML = (liters > 0 && cost > 0)
+    ? `<strong style="color:var(--teal);font-size:17px">${(cost/liters).toFixed(3)}€/L</strong><span>automatique</span>`
+    : `<span>—</span><span>automatique</span>`;
 };
 
-window.syncFuelCost = function() { /* cost is already synced via ef-fuel-cost */ };
-
 function saveEntry() {
-  const type = document.getElementById('ef-type').value;
+  const type   = document.getElementById('ef-type').value;
   const isFuel = type === 'carburant';
-
-  const cost = isFuel
+  const cost   = isFuel
     ? parseFloat(document.getElementById('ef-fuel-cost')?.value) || 0
     : parseFloat(document.getElementById('ef-cost')?.value) || 0;
-
   const desc = document.getElementById('ef-desc').value.trim();
   if (!desc && !isFuel) { alert('La description est obligatoire.'); return; }
 
   const data = {
     vehicleId:   document.getElementById('ef-vehicle').value,
-    type,
+    type, cost,
     date:        document.getElementById('ef-date').value,
     mileage:     parseInt(document.getElementById('ef-mileage').value) || 0,
-    description: desc || (isFuel ? 'Plein de carburant' : ''),
-    cost,
-    provider:    isFuel ? '' : (document.getElementById('ef-provider')?.value.trim() || ''),
-    invoice:     isFuel ? '' : (document.getElementById('ef-invoice')?.value.trim()  || ''),
+    description: desc || 'Plein de carburant',
+    provider:    isFuel ? '' : (document.getElementById('ef-provider')?.value.trim()||''),
+    invoice:     isFuel ? '' : (document.getElementById('ef-invoice')?.value.trim()||''),
     notes:       document.getElementById('ef-notes').value.trim(),
-    liters:      isFuel ? (parseFloat(document.getElementById('ef-liters')?.value) || 0) : undefined,
+    liters:      isFuel ? (parseFloat(document.getElementById('ef-liters')?.value)||0) : undefined,
   };
 
   if (State.editingEntryId) {
@@ -614,18 +665,13 @@ function confirmDeleteEntry(id) {
   renderPage(State.currentPage);
 }
 
-// ─── VEHICLE FORM ───────────────────────────
+// ─── VEHICLE FORM — sans sélecteur de couleur ──
 function openVehicleForm(vehicleId = null) {
   State.editingVehicleId = vehicleId;
   const v = vehicleId ? DB.getVehicle(vehicleId) : null;
 
-  const swatches = COLORS.map(c =>
-    `<div class="color-swatch ${(v?.color||COLORS[0])===c?'selected':''}" style="background:${c}" onclick="selectColor(this,'${c}')"></div>`
-  ).join('');
-
   document.getElementById('vf-modal-title').textContent = v ? 'Modifier le véhicule' : 'Nouveau véhicule';
   document.getElementById('vf-modal-body').innerHTML = `
-    <input type="hidden" id="vf-color" value="${v?.color||COLORS[0]}">
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Marque</label>
@@ -673,13 +719,16 @@ function openVehicleForm(vehicleId = null) {
         <input class="form-input" type="number" id="vf-purchase-mileage" placeholder="0" value="${v?.purchaseMileage||''}">
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Prix d'achat (€)</label>
-      <input class="form-input" type="number" id="vf-purchase-price" placeholder="0" value="${v?.purchasePrice||''}">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Couleur de la fiche</label>
-      <div class="color-swatches">${swatches}</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Prix d'achat (€)</label>
+        <input class="form-input" type="number" id="vf-purchase-price" placeholder="0" value="${v?.purchasePrice||''}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Intervalle entretien (km)</label>
+        <input class="form-input" type="number" id="vf-service-interval" placeholder="ex: 15000" value="${v?.serviceInterval||''}">
+        <div class="form-hint">Km entre 2 entretiens — affiche la prochaine échéance sur l'accueil</div>
+      </div>
     </div>
     <div class="form-group">
       <label class="form-label">Notes</label>
@@ -692,12 +741,6 @@ function openVehicleForm(vehicleId = null) {
 
   openModal('vehicle-modal');
 }
-
-window.selectColor = function(el, color) {
-  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
-  el.classList.add('selected');
-  document.getElementById('vf-color').value = color;
-};
 
 function saveVehicle() {
   const name = document.getElementById('vf-name').value.trim();
@@ -713,14 +756,16 @@ function saveVehicle() {
     purchaseDate:    document.getElementById('vf-purchase-date').value,
     purchaseMileage: parseInt(document.getElementById('vf-purchase-mileage').value) || 0,
     purchasePrice:   parseFloat(document.getElementById('vf-purchase-price').value) || 0,
-    color:           document.getElementById('vf-color').value,
+    serviceInterval: parseInt(document.getElementById('vf-service-interval').value) || '',
     notes:           document.getElementById('vf-notes').value.trim(),
   };
   if (State.editingVehicleId) {
     DB.updateVehicle(State.editingVehicleId, data);
     showToast('Véhicule mis à jour ✓');
   } else {
-    const v = DB.createVehicle({ ...data, photo: null });
+    // Couleur auto parmi la palette selon l'index
+    const idx = DB.getVehicles().length % COLORS.length;
+    const v = DB.createVehicle({ ...data, color: COLORS[idx], photo: null });
     State.activeVehicleId = v.id;
     showToast('Véhicule créé ✓');
   }
@@ -749,19 +794,15 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.nav-item[data-page]').forEach(item =>
     item.addEventListener('click', () => navigate(item.dataset.page))
   );
-
   document.querySelectorAll('.modal-overlay').forEach(overlay =>
     overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(overlay.id); })
   );
-
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/service-worker.js').catch(() => {});
   }
-
   navigate('home');
 });
 
-// Expose globals
 Object.assign(window, {
   openEntryForm, openVehicleForm, triggerPhotoUpload,
   navigate, closeModal, saveEntry, saveVehicle,

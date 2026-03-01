@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0f0f13">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Mobile Dev">
+  <title>Mobile Dev</title>
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ══════════════════════════════════════
+       PAGE : HOME (Tableau de bord)
+  ══════════════════════════════════════ -->
+  <div id="page-home" class="page active">
+    <div class="topbar">
+      <span class="topbar-title">Mobile Dev</span>
+      <div class="topbar-actions">
+        <!-- 🔐 Connexion Google — à activer lors du passage Firebase -->
+        <div class="icon-btn" id="btn-login" title="Connexion (bientôt disponible)" style="opacity:0.4; cursor:default;">👤</div>
+      </div>
+    </div>
+
+    <!-- Sélecteur de véhicule -->
+    <div class="v-selector-wrap" id="home-pills"></div>
+
+    <!-- Panel véhicule actif -->
+    <div id="home-panel"></div>
+
+    <!-- Entrées récentes -->
+    <div id="home-recent"></div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       PAGE : HISTORIQUE
+  ══════════════════════════════════════ -->
+  <div id="page-history" class="page">
+    <div class="topbar">
+      <span class="topbar-title">Historique</span>
+    </div>
+
+    <div class="v-selector-wrap" id="history-pills"></div>
+    <div class="filter-bar" id="history-filters"></div>
+    <div id="history-timeline"></div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       PAGE : GARAGE (liste véhicules)
+  ══════════════════════════════════════ -->
+  <div id="page-garage" class="page">
+    <div class="topbar">
+      <span class="topbar-title">Garage</span>
+    </div>
+    <div class="garage-list" id="garage-list"></div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       PAGE : STATISTIQUES
+  ══════════════════════════════════════ -->
+  <div id="page-stats" class="page">
+    <div class="topbar">
+      <span class="topbar-title">Statistiques</span>
+    </div>
+    <div class="v-selector-wrap" id="stats-pills"></div>
+    <div id="stats-content"></div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       BOTTOM NAVIGATION
+  ══════════════════════════════════════ -->
+  <nav class="bottom-nav">
+    <div class="nav-item active" data-page="home">
+      <span class="nav-ico">🏠</span>
+      <span class="nav-lbl">Accueil</span>
+    </div>
+    <div class="nav-item" data-page="history">
+      <span class="nav-ico">📋</span>
+      <span class="nav-lbl">Historique</span>
+    </div>
+    <div class="nav-fab" title="Ajouter une entrée">+</div>
+    <div class="nav-item" data-page="stats">
+      <span class="nav-ico">📊</span>
+      <span class="nav-lbl">Stats</span>
+    </div>
+    <div class="nav-item" data-page="garage">
+      <span class="nav-ico">🚗</span>
+      <span class="nav-lbl">Garage</span>
+    </div>
+  </nav>
+
+  <!-- ══════════════════════════════════════
+       MODAL : NOUVELLE ENTRÉE / MODIFIER
+  ══════════════════════════════════════ -->
+  <div class="modal-overlay" id="entry-modal" onclick="if(event.target===this)closeModal('entry-modal')">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title" id="entry-modal-title">Nouvelle entrée</div>
+      <div class="modal-body" id="entry-modal-body"></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       MODAL : NOUVEAU VÉHICULE / MODIFIER
+  ══════════════════════════════════════ -->
+  <div class="modal-overlay" id="vehicle-modal" onclick="if(event.target===this)closeModal('vehicle-modal')">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title" id="vf-modal-title">Nouveau véhicule</div>
+      <div class="modal-body" id="vf-modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast"></div>
+
+</div><!-- /#app -->
+
+<script src="db.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,46 +1,40 @@
 /* ═══════════════════════════════════════════════
-   Mobile Dev — app.js
-   Architecture Firebase-ready (voir db.js)
+   Mobile Dev — app.js v2
 ═══════════════════════════════════════════════ */
 
-// ─────────────────────────────────────────────
-// STATE
-// ─────────────────────────────────────────────
+// ─── STATE ──────────────────────────────────
 const State = {
-  currentPage:     'home',
-  activeVehicleId: null,
-  historyFilter:   'all',
-  editingEntryId:  null,
-  editingVehicleId:null,
+  currentPage:      'home',
+  activeVehicleId:  null,
+  historyFilter:    'all',
+  editingEntryId:   null,
+  editingVehicleId: null,
 };
 
-// ─────────────────────────────────────────────
-// ENTRY TYPES
-// ─────────────────────────────────────────────
+// ─── TYPES ──────────────────────────────────
 const TYPES = {
-  entretien:  { label: 'Entretien',  ico: '🔧', color: 'blue'   },
-  reparation: { label: 'Réparation', ico: '🛠️',  color: 'orange' },
-  assurance:  { label: 'Assurance',  ico: '📄', color: 'green'  },
-  taxe:       { label: 'Taxe',       ico: '🏛️',  color: 'purple' },
-  controle:   { label: 'Contrôle',   ico: '✅', color: 'yellow' },
-  pneus:      { label: 'Pneus',      ico: '⚫', color: 'muted'  },
-  achat:      { label: 'Achat',      ico: '🛒', color: 'red'    },
-  autre:      { label: 'Autre',      ico: '📌', color: 'muted'  },
+  entretien:  { label:'Entretien',  ico:'🔧', color:'blue'    },
+  reparation: { label:'Réparation', ico:'🛠️',  color:'orange'  },
+  assurance:  { label:'Assurance',  ico:'📄', color:'green'   },
+  taxe:       { label:'Taxe',       ico:'🏛️',  color:'purple'  },
+  controle:   { label:'Contrôle',   ico:'✅', color:'yellow'  },
+  pneus:      { label:'Pneus',      ico:'⚫', color:'muted'   },
+  carburant:  { label:'Carburant',  ico:'⛽', color:'teal'    },
+  achat:      { label:'Achat',      ico:'🛒', color:'red'     },
+  autre:      { label:'Autre',      ico:'📌', color:'muted'   },
 };
 
 const COLORS = ['#4d8eff','#20d070','#ff7043','#a78bfa','#fbbf24','#ff4757','#00cec9','#fd79a8'];
 
-// ─────────────────────────────────────────────
-// UTILS
-// ─────────────────────────────────────────────
-function fmt(n) { return Number(n).toLocaleString('fr-BE'); }
-function fmtEur(n) { return (n ? fmt(Math.round(n)) : '0') + '€'; }
-function fmtDate(d) {
+// ─── UTILS ──────────────────────────────────
+const fmt    = n => Number(n).toLocaleString('fr-BE');
+const fmtEur = n => (n ? fmt(Math.round(n)) : '0') + '€';
+const fmtDate = d => {
   if (!d) return '';
-  const dt = new Date(d);
-  return dt.toLocaleDateString('fr-BE', { day:'2-digit', month:'2-digit', year:'numeric' });
-}
-function today() { return new Date().toISOString().slice(0,10); }
+  return new Date(d).toLocaleDateString('fr-BE', { day:'2-digit', month:'2-digit', year:'numeric' });
+};
+const today = () => new Date().toISOString().slice(0, 10);
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -48,12 +42,10 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-// ─────────────────────────────────────────────
-// NAVIGATION
-// ─────────────────────────────────────────────
+// ─── NAVIGATION ─────────────────────────────
 function navigate(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.nav-item[data-page]').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
   const navEl = document.querySelector(`.nav-item[data-page="${page}"]`);
   if (navEl) navEl.classList.add('active');
@@ -61,20 +53,21 @@ function navigate(page) {
   renderPage(page);
 }
 
-function renderPage(page) {
-  if (page === 'home')    renderHome();
-  if (page === 'garage')  renderGarage();
-  if (page === 'history') renderHistory();
-  if (page === 'stats')   renderStats();
+function renderPage(p) {
+  if (p === 'home')    renderHome();
+  if (p === 'garage')  renderGarage();
+  if (p === 'history') renderHistory();
+  if (p === 'stats')   renderStats();
 }
 
-// ─────────────────────────────────────────────
-// HOME PAGE
-// ─────────────────────────────────────────────
+// ─── HOME ───────────────────────────────────
 function renderHome() {
   const vehicles = DB.getVehicles();
+  if (!State.activeVehicleId || !vehicles.find(v => v.id === State.activeVehicleId)) {
+    State.activeVehicleId = vehicles[0]?.id || null;
+  }
 
-  // Vehicle selector pills
+  // Pills — ① pas de pill "+ Ajouter"
   const pillsWrap = document.getElementById('home-pills');
   pillsWrap.innerHTML = '';
   vehicles.forEach(v => {
@@ -84,117 +77,94 @@ function renderHome() {
     pill.onclick = () => { State.activeVehicleId = v.id; renderHome(); };
     pillsWrap.appendChild(pill);
   });
-  // Add pill
-  const addPill = document.createElement('div');
-  addPill.className = 'v-pill v-pill-add';
-  addPill.innerHTML = '＋ Ajouter';
-  addPill.onclick = openVehicleForm;
-  pillsWrap.appendChild(addPill);
-
-  // Ensure an active vehicle
-  if (!State.activeVehicleId || !vehicles.find(v => v.id === State.activeVehicleId)) {
-    State.activeVehicleId = vehicles[0]?.id || null;
-  }
 
   const vehicle = DB.getVehicle(State.activeVehicleId);
   if (!vehicle) {
-    document.getElementById('home-panel').innerHTML = `
-      <div class="empty-state"><div class="empty-ico">🚗</div><p>Aucun véhicule.<br>Ajoutez-en un pour commencer !</p></div>`;
+    document.getElementById('home-panel').innerHTML =
+      `<div class="empty-state"><div class="empty-ico">🚗</div><p>Aucun véhicule.<br>Rendez-vous dans <b>Garage</b> pour en ajouter un.</p></div>`;
+    document.getElementById('home-recent').innerHTML = '';
     return;
   }
-
   renderVehiclePanel(vehicle);
   renderRecentEntries(vehicle);
 }
 
 function renderVehiclePanel(vehicle) {
-  const stats = DB.getVehicleStats(vehicle.id);
-  const panel = document.getElementById('home-panel');
-
+  const stats  = DB.getVehicleStats(vehicle.id);
+  const panel  = document.getElementById('home-panel');
   const hasPhoto = !!vehicle.photo;
   const heroBg = hasPhoto
-    ? `background-image: url('${vehicle.photo}'); background-size: cover; background-position: center;`
-    : `background: linear-gradient(160deg, #0d1f4500 0%, transparent);`;
-
-  const glow = vehicle.color
-    ? `radial-gradient(circle at 70% 50%, ${vehicle.color}30 0%, transparent 65%)`
-    : `radial-gradient(circle at 70% 50%, rgba(77,142,255,0.2) 0%, transparent 65%)`;
+    ? `background-image:url('${vehicle.photo}');background-size:cover;background-position:center;`
+    : '';
+  const glow = `radial-gradient(circle at 70% 50%, ${vehicle.color||'#4d8eff'}28 0%, transparent 65%)`;
 
   panel.innerHTML = `
     <div class="v-panel">
-      <div class="v-hero ${hasPhoto ? 'has-photo' : ''}" id="v-hero-${vehicle.id}">
-        <div class="v-hero-bg ${hasPhoto ? 'has-photo' : ''}" style="${heroBg}"></div>
+      <div class="v-hero${hasPhoto?' has-photo':''}">
+        <div class="v-hero-bg${hasPhoto?' has-photo':''}" style="${heroBg}"></div>
         <div class="v-hero-overlay"></div>
         <div class="v-hero-glow" style="background:${glow}"></div>
         <div class="v-hero-emoji">🚗</div>
-        <div class="v-hero-name">${vehicle.brand ? vehicle.brand + ' ' : ''}${vehicle.name}</div>
-        <div class="v-hero-sub">${[vehicle.model, vehicle.year, vehicle.fuel].filter(Boolean).join(' · ')}</div>
-        <div class="v-hero-photo-btn" onclick="triggerPhotoUpload('${vehicle.id}')">
-          📷 ${hasPhoto ? 'Changer la photo' : 'Ajouter une photo'}
-        </div>
+        <div class="v-hero-name">${vehicle.brand?vehicle.brand+' ':''}${vehicle.name}</div>
+        <div class="v-hero-sub">${[vehicle.model,vehicle.year,vehicle.fuel].filter(Boolean).join(' · ')}</div>
+        <!-- ② Bouton 📷 discret coin inférieur droit -->
+        <div class="v-hero-photo-fab" onclick="triggerPhotoUpload('${vehicle.id}')" title="Changer la photo">📷</div>
       </div>
-      <div class="v-stats-row">
+
+      <!-- ③ 4 stats : km · coût/km (tout incl.) · frais hors carbu · carburant -->
+      <div class="v-stats-grid">
         <div class="v-stat">
           <div class="v-stat-val">${vehicle.mileage ? fmt(vehicle.mileage) : '—'}</div>
           <div class="v-stat-lbl">km actuels</div>
         </div>
         <div class="v-stat">
-          <div class="v-stat-val">${stats?.costPerKm ? stats.costPerKm.toFixed(2) + '€' : '—'}</div>
-          <div class="v-stat-lbl">coût / km</div>
+          <div class="v-stat-val">${stats?.costPerKm ? stats.costPerKm.toFixed(2)+'€' : '—'}</div>
+          <div class="v-stat-lbl">coût/km (tout incl.)</div>
         </div>
         <div class="v-stat">
-          <div class="v-stat-val">${stats ? fmtEur(stats.totalCost) : '—'}</div>
-          <div class="v-stat-lbl">total frais</div>
+          <div class="v-stat-val green">${stats ? fmtEur(stats.totalOther) : '—'}</div>
+          <div class="v-stat-lbl">frais hors carbu</div>
+        </div>
+        <div class="v-stat">
+          <div class="v-stat-val fuel">${stats ? fmtEur(stats.totalFuel) : '—'}</div>
+          <div class="v-stat-lbl">carburant total${stats?.totalLiters?' ('+Math.round(stats.totalLiters)+' L)':''}</div>
         </div>
       </div>
-      <div class="v-actions">
-        <div class="v-action" onclick="openEntryForm()">
-          <span class="v-action-ico">➕</span>
-          <div>
-            <div class="v-action-txt">Ajouter</div>
-            <div class="v-action-sub">Nouvelle entrée</div>
-          </div>
-        </div>
-        <div class="v-action" onclick="openVehicleForm('${vehicle.id}')">
-          <span class="v-action-ico">✏️</span>
-          <div>
-            <div class="v-action-txt">Modifier</div>
-            <div class="v-action-sub">Infos véhicule</div>
-          </div>
-        </div>
+
+      <!-- ④⑤ Bouton pleine largeur, plus de bouton "Modifier véhicule" -->
+      <div class="v-action-full" onclick="openEntryForm()">
+        <span class="v-action-ico">➕</span>
+        <span class="v-action-txt">Ajouter une entrée</span>
       </div>
     </div>`;
 }
 
 function renderRecentEntries(vehicle) {
   const entries = DB.getEntries(vehicle.id)
-    .sort((a,b) => new Date(b.date) - new Date(a.date))
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 5);
 
   const wrap = document.getElementById('home-recent');
   wrap.innerHTML = `<div class="sec-header"><span class="sec-title">Récent</span><span class="sec-link" onclick="navigate('history')">Tout voir →</span></div>`;
 
-  if (entries.length === 0) {
-    wrap.innerHTML += `<div class="empty-state"><div class="empty-ico">📋</div><p>Aucune entrée pour ce véhicule</p></div>`;
+  if (!entries.length) {
+    wrap.innerHTML += `<div class="empty-state"><div class="empty-ico">📋</div><p>Aucune entrée</p></div>`;
     return;
   }
-
   const tl = document.createElement('div');
   tl.className = 'timeline';
-  entries.forEach(e => tl.appendChild(buildEntryEl(e)));
+  // Sur home : pas de boutons modifier/supprimer, juste clic pour ouvrir form
+  entries.forEach(e => tl.appendChild(buildEntryEl(e, false)));
   wrap.appendChild(tl);
 }
 
-// ─────────────────────────────────────────────
-// HISTORY PAGE
-// ─────────────────────────────────────────────
+// ─── HISTORY ────────────────────────────────
 function renderHistory() {
   const vehicles = DB.getVehicles();
   if (!State.activeVehicleId || !vehicles.find(v => v.id === State.activeVehicleId)) {
     State.activeVehicleId = vehicles[0]?.id || null;
   }
 
-  // Pills
   const pillsWrap = document.getElementById('history-pills');
   pillsWrap.innerHTML = '';
   vehicles.forEach(v => {
@@ -205,40 +175,27 @@ function renderHistory() {
     pillsWrap.appendChild(pill);
   });
 
-  // Filters
   const filterBar = document.getElementById('history-filters');
   filterBar.innerHTML = '';
-  const filters = [{ key:'all', label:'Tous' }, ...Object.entries(TYPES).map(([k,v])=>({key:k, label:v.label}))];
-  filters.forEach(f => {
-    const pill = document.createElement('div');
-    pill.className = 'fpill' + (State.historyFilter === f.key ? ' active' : '');
-    pill.textContent = f.label;
-    pill.onclick = () => { State.historyFilter = f.key; renderHistory(); };
-    filterBar.appendChild(pill);
-  });
+  [{ key:'all', label:'Tous' }, ...Object.entries(TYPES).map(([k,t]) => ({ key:k, label:t.label }))]
+    .forEach(f => {
+      const pill = document.createElement('div');
+      pill.className = 'fpill' + (State.historyFilter === f.key ? ' active' : '');
+      pill.textContent = f.label;
+      pill.onclick = () => { State.historyFilter = f.key; renderHistory(); };
+      filterBar.appendChild(pill);
+    });
 
   const vehicle = DB.getVehicle(State.activeVehicleId);
   const wrap = document.getElementById('history-timeline');
   wrap.innerHTML = '';
+  if (!vehicle) { wrap.innerHTML = '<div class="empty-state"><p>Sélectionnez un véhicule</p></div>'; return; }
 
-  if (!vehicle) {
-    wrap.innerHTML = '<div class="empty-state"><p>Sélectionnez un véhicule</p></div>';
-    return;
-  }
+  let entries = DB.getEntries(vehicle.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+  if (State.historyFilter !== 'all') entries = entries.filter(e => e.type === State.historyFilter);
 
-  let entries = DB.getEntries(vehicle.id)
-    .sort((a,b) => new Date(b.date) - new Date(a.date));
+  if (!entries.length) { wrap.innerHTML = '<div class="empty-state"><div class="empty-ico">📭</div><p>Aucune entrée</p></div>'; return; }
 
-  if (State.historyFilter !== 'all') {
-    entries = entries.filter(e => e.type === State.historyFilter);
-  }
-
-  if (entries.length === 0) {
-    wrap.innerHTML = '<div class="empty-state"><div class="empty-ico">📭</div><p>Aucune entrée</p></div>';
-    return;
-  }
-
-  // Group by year
   const byYear = {};
   entries.forEach(e => {
     const y = e.date ? new Date(e.date).getFullYear() : 'N/A';
@@ -253,98 +210,122 @@ function renderHistory() {
     badge.className = 'year-badge';
     badge.innerHTML = `<span class="year-badge-txt">${year}</span><div class="year-badge-line"></div>`;
     tl.appendChild(badge);
-    byYear[year].forEach(e => tl.appendChild(buildEntryEl(e)));
+    // ⑩ Dans historique : afficher les boutons modifier/supprimer
+    byYear[year].forEach(e => tl.appendChild(buildEntryEl(e, true)));
   });
   wrap.appendChild(tl);
 }
 
-function buildEntryEl(entry) {
+// ─── BUILD ENTRY ELEMENT ────────────────────
+// showActions=true → affiche les boutons modifier/supprimer (⑩)
+function buildEntryEl(entry, showActions) {
   const t = TYPES[entry.type] || TYPES.autre;
   const el = document.createElement('div');
   el.className = 't-entry';
+  const isFuel = entry.type === 'carburant';
   const costFree = !entry.cost || parseFloat(entry.cost) === 0;
+  const costClass = isFuel ? 'fuel' : costFree ? 'free' : '';
+  const costTxt = costFree && !isFuel ? 'Gratuit' : fmtEur(entry.cost);
+
+  const fuelChips = isFuel
+    ? `<div class="t-fuel-chips">
+        ${entry.liters ? `<div class="fuel-chip">${entry.liters} L</div>` : ''}
+        ${entry.liters && entry.cost ? `<div class="fuel-chip">${(entry.cost / entry.liters).toFixed(3)}€/L</div>` : ''}
+       </div>`
+    : '';
+
+  const actions = showActions
+    ? `<div class="t-entry-actions">
+        <div class="t-act t-act-edit" onclick="openEntryForm('${entry.id}')">✏️ Modifier</div>
+        <div class="t-act t-act-del"  onclick="confirmDeleteEntry('${entry.id}')">🗑 Supprimer</div>
+       </div>`
+    : '';
+
   el.innerHTML = `
     <div class="t-dot ${entry.type}">${t.ico}</div>
-    <div class="t-card" onclick="openEntryForm('${entry.id}')">
-      <div class="t-top">
-        <div class="t-desc">${entry.description || '—'}</div>
-        <div class="t-cost ${costFree ? 'free' : ''}">${costFree ? 'Gratuit' : fmtEur(entry.cost)}</div>
+    <div class="t-card">
+      <div class="t-card-main" onclick="openEntryForm('${entry.id}')">
+        <div class="t-top">
+          <div class="t-desc">${entry.description || '—'}</div>
+          <div class="t-cost ${costClass}">${costTxt}</div>
+        </div>
+        <div class="t-meta">
+          ${fmtDate(entry.date)}${entry.mileage ? ' · '+fmt(entry.mileage)+' km' : ''}
+          ${entry.provider ? `<span class="t-provider">· ${entry.provider}</span>` : ''}
+        </div>
+        ${fuelChips}
       </div>
-      <div class="t-meta">
-        ${fmtDate(entry.date)}${entry.mileage ? ' · ' + fmt(entry.mileage) + ' km' : ''}
-        ${entry.provider ? '<span class="t-provider">· ' + entry.provider + '</span>' : ''}
-      </div>
+      ${actions}
     </div>`;
   return el;
 }
 
-// ─────────────────────────────────────────────
-// GARAGE PAGE
-// ─────────────────────────────────────────────
+// ─── GARAGE ─────────────────────────────────
 function renderGarage() {
   const vehicles = DB.getVehicles();
   const wrap = document.getElementById('garage-list');
   wrap.innerHTML = '';
 
-  if (vehicles.length === 0) {
-    wrap.innerHTML = `<div class="empty-state"><div class="empty-ico">🏎️</div><p>Aucun véhicule.<br>Ajoutez-en un !</p></div>`;
-    return;
-  }
-
   vehicles.forEach(v => {
-    const stats = DB.getVehicleStats(v.id);
-    const card = document.createElement('div');
-    card.className = 'garage-card';
+    const stats  = DB.getVehicleStats(v.id);
     const hasPhoto = !!v.photo;
     const heroBg = hasPhoto
-      ? `background-image:url('${v.photo}'); background-size:cover; background-position:center;`
-      : `background: linear-gradient(135deg, ${v.color || '#1a3366'}22, ${v.color || '#4d8eff'}44);`;
+      ? `background-image:url('${v.photo}');background-size:cover;background-position:center;`
+      : `background:linear-gradient(135deg,${v.color||'#1a3366'}22,${v.color||'#4d8eff'}44);`;
+
+    const card = document.createElement('div');
+    card.className = 'garage-card';
     card.innerHTML = `
       <div class="garage-card-hero" style="${heroBg}">
         ${!hasPhoto ? '<span style="font-size:52px">🚗</span>' : ''}
       </div>
       <div class="garage-card-body">
-        <div class="garage-card-name">${v.brand ? v.brand + ' ' : ''}${v.name}</div>
-        <div class="garage-card-sub">${[v.model, v.year, v.fuel].filter(Boolean).join(' · ') || 'Infos à compléter'}</div>
+        <div class="garage-card-name">${v.brand?v.brand+' ':''}${v.name}</div>
+        <div class="garage-card-sub">${[v.model,v.year,v.fuel].filter(Boolean).join(' · ')||'Infos à compléter'}</div>
         <div class="garage-card-stats">
           <div>
-            <div class="gcs-val">${v.mileage ? fmt(v.mileage) + ' km' : '—'}</div>
+            <div class="gcs-val">${v.mileage ? fmt(v.mileage)+' km' : '—'}</div>
             <div class="gcs-lbl">Kilométrage</div>
           </div>
           <div>
-            <div class="gcs-val">${stats ? fmtEur(stats.totalCost) : '—'}</div>
-            <div class="gcs-lbl">Total frais</div>
+            <div class="gcs-val">${stats ? fmtEur(stats.totalOther) : '—'}</div>
+            <div class="gcs-lbl">Frais</div>
           </div>
           <div>
-            <div class="gcs-val">${stats?.entryCount || 0}</div>
+            <div class="gcs-val">${stats?.entryCount||0}</div>
             <div class="gcs-lbl">Entrées</div>
           </div>
         </div>
+        <!-- ⑨ Boutons Détail / Modifier / Supprimer -->
+        <div class="garage-card-actions">
+          <div class="gc-btn gc-btn-detail" onclick="garageDetail('${v.id}')">📋 Détail</div>
+          <div class="gc-btn gc-btn-edit"   onclick="openVehicleForm('${v.id}')">✏️ Modifier</div>
+          <div class="gc-btn gc-btn-del"    onclick="confirmDeleteVehicle('${v.id}')">🗑</div>
+        </div>
       </div>`;
-    card.onclick = () => { State.activeVehicleId = v.id; navigate('home'); };
     wrap.appendChild(card);
   });
 
-  // Add vehicle button
+  // ⑨ Bouton "Ajouter un véhicule"
   const addCard = document.createElement('div');
-  addCard.className = 'garage-card';
-  addCard.style.cssText = 'border-style: dashed; cursor: pointer;';
-  addCard.innerHTML = `<div class="garage-card-hero" style="font-size:40px; background: var(--surface);">➕</div><div class="garage-card-body"><div class="garage-card-name">Ajouter un véhicule</div></div>`;
-  addCard.onclick = openVehicleForm;
+  addCard.className = 'garage-add-card';
+  addCard.innerHTML = `<div class="garage-add-ico">➕</div><div class="garage-add-lbl">Ajouter un véhicule</div>`;
+  addCard.onclick = () => openVehicleForm();
   wrap.appendChild(addCard);
 }
 
-// ─────────────────────────────────────────────
-// STATS PAGE
-// ─────────────────────────────────────────────
+function garageDetail(vehicleId) {
+  State.activeVehicleId = vehicleId;
+  navigate('home');
+}
+
+// ─── STATS ──────────────────────────────────
 function renderStats() {
-  const vehicle = DB.getVehicle(State.activeVehicleId);
   const vehicles = DB.getVehicles();
-  if (!State.activeVehicleId || !vehicle) {
+  if (!State.activeVehicleId || !vehicles.find(v => v.id === State.activeVehicleId)) {
     State.activeVehicleId = vehicles[0]?.id || null;
   }
 
-  // Pills
   const pillsWrap = document.getElementById('stats-pills');
   pillsWrap.innerHTML = '';
   vehicles.forEach(v => {
@@ -359,25 +340,27 @@ function renderStats() {
   const wrap = document.getElementById('stats-content');
   if (!v) { wrap.innerHTML = ''; return; }
 
-  const stats = DB.getVehicleStats(v.id);
-
-  // By year chart
-  const years = Object.keys(stats.byYear).sort((a,b) => b - a);
-  const maxYear = Math.max(...Object.values(stats.byYear));
+  const s = DB.getVehicleStats(v.id);
+  const years  = Object.keys(s.byYear).sort((a,b) => b - a);
+  const maxYr  = Math.max(...Object.values(s.byYear), 1);
   const yearBars = years.map(y => `
     <div class="bar-row">
       <div class="bar-label">${y}</div>
-      <div class="bar-track"><div class="bar-fill" style="width:${(stats.byYear[y]/maxYear*100).toFixed(1)}%"></div></div>
-      <div class="bar-val">${fmtEur(stats.byYear[y])}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(s.byYear[y]/maxYr*100).toFixed(1)}%"></div></div>
+      <div class="bar-val">${fmtEur(s.byYear[y])}</div>
     </div>`).join('');
 
-  // By type
-  const typeColors = { entretien:'var(--blue)', reparation:'var(--orange)', assurance:'var(--green)', taxe:'var(--purple)', controle:'var(--yellow)', pneus:'var(--muted2)', achat:'var(--red)', autre:'var(--muted)' };
-  const typeRows = Object.entries(stats.byType)
+  const typeColors = {
+    entretien:'var(--blue)', reparation:'var(--orange)', assurance:'var(--green)',
+    taxe:'var(--purple)', controle:'var(--yellow)', pneus:'var(--muted2)',
+    carburant:'var(--teal)', achat:'var(--red)', autre:'var(--muted)'
+  };
+  const total = s.totalOther + s.totalFuel;
+  const typeRows = Object.entries(s.byType)
     .sort((a,b) => b[1] - a[1])
     .map(([type, cost]) => {
       const t = TYPES[type] || TYPES.autre;
-      const pct = stats.totalCost > 0 ? (cost / stats.totalCost * 100).toFixed(0) : 0;
+      const pct = total > 0 ? (cost / total * 100).toFixed(0) : 0;
       return `<div class="pie-row">
         <div class="pie-dot" style="background:${typeColors[type]||'var(--muted)'}"></div>
         <div class="pie-name">${t.ico} ${t.label}</div>
@@ -388,24 +371,24 @@ function renderStats() {
   wrap.innerHTML = `
     <div class="stats-grid">
       <div class="stat-card">
-        <div class="stat-card-label">Total frais</div>
-        <div class="stat-card-val">${fmtEur(stats.totalCost)}</div>
-        <div class="stat-card-sub">Hors achat</div>
+        <div class="stat-card-label">Frais hors carbu</div>
+        <div class="stat-card-val">${fmtEur(s.totalOther)}</div>
+        <div class="stat-card-sub">Hors achat et essence</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-label">Carburant</div>
+        <div class="stat-card-val teal">${fmtEur(s.totalFuel)}</div>
+        <div class="stat-card-sub">${s.totalLiters ? Math.round(s.totalLiters)+' L enregistrés' : 'Aucun plein saisi'}</div>
       </div>
       <div class="stat-card">
         <div class="stat-card-label">Coût / km</div>
-        <div class="stat-card-val">${stats.costPerKm ? stats.costPerKm.toFixed(2) + '€' : '—'}</div>
-        <div class="stat-card-sub">${stats.kmDriven ? fmt(stats.kmDriven) + ' km parcourus' : ''}</div>
+        <div class="stat-card-val">${s.costPerKm ? s.costPerKm.toFixed(2)+'€' : '—'}</div>
+        <div class="stat-card-sub">Frais + carbu + achat<br>${s.kmDriven ? fmt(s.kmDriven)+' km parcourus' : ''}</div>
       </div>
       <div class="stat-card">
         <div class="stat-card-label">Coût total</div>
-        <div class="stat-card-val">${fmtEur(stats.totalWithPurchase)}</div>
-        <div class="stat-card-sub">Achat inclus</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-card-label">Entrées</div>
-        <div class="stat-card-val">${stats.entryCount}</div>
-        <div class="stat-card-sub">Opérations enregistrées</div>
+        <div class="stat-card-val">${fmtEur(s.totalAllInclPurchase)}</div>
+        <div class="stat-card-sub">Tout inclus</div>
       </div>
       <div class="stat-card full">
         <div class="stat-card-label">Dépenses par année</div>
@@ -418,18 +401,15 @@ function renderStats() {
     </div>`;
 }
 
-// ─────────────────────────────────────────────
-// PHOTO UPLOAD
-// ─────────────────────────────────────────────
+// ─── PHOTO UPLOAD ───────────────────────────
 function triggerPhotoUpload(vehicleId) {
   const input = document.createElement('input');
   input.type = 'file'; input.accept = 'image/*';
-  input.onchange = (e) => {
+  input.onchange = e => {
     const file = e.target.files[0];
     if (!file) return;
-    // Resize + compress to base64
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = ev => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
@@ -439,8 +419,7 @@ function triggerPhotoUpload(vehicleId) {
         if (h > MAX) { w = w * MAX / h; h = MAX; }
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
-        DB.updateVehicle(vehicleId, { photo: dataUrl });
+        DB.updateVehicle(vehicleId, { photo: canvas.toDataURL('image/jpeg', 0.75) });
         showToast('Photo mise à jour ✓');
         renderPage(State.currentPage);
       };
@@ -451,30 +430,30 @@ function triggerPhotoUpload(vehicleId) {
   input.click();
 }
 
-// ─────────────────────────────────────────────
-// ENTRY FORM MODAL
-// ─────────────────────────────────────────────
+// ─── ENTRY FORM ─────────────────────────────
 function openEntryForm(entryId = null) {
   State.editingEntryId = entryId;
-  const entry = entryId ? DB.getEntry(entryId) : null;
+  const entry    = entryId ? DB.getEntry(entryId) : null;
   const vehicles = DB.getVehicles();
+  let selType    = entry?.type || 'entretien';
 
-  let selectedType = entry?.type || 'entretien';
-
-  const typeGrid = Object.entries(TYPES).map(([k,v]) =>
-    `<div class="type-btn ${selectedType === k ? 'selected' : ''}" data-type="${k}" onclick="selectType(this,'${k}')">
-      <div class="type-ico">${v.ico}</div>
-      <span class="type-lbl">${v.label}</span>
-    </div>`
-  ).join('');
+  const typeGrid = Object.entries(TYPES).map(([k, t]) => {
+    const isSel = selType === k;
+    const selClass = isSel ? (k === 'carburant' ? 'selected-fuel' : 'selected') : '';
+    return `<div class="type-btn ${selClass}" data-type="${k}" onclick="selectType(this,'${k}')">
+      <div class="type-ico">${t.ico}</div>
+      <span class="type-lbl">${t.label}</span>
+    </div>`;
+  }).join('');
 
   const vehicleOptions = vehicles.map(v =>
-    `<option value="${v.id}" ${(entry?.vehicleId || State.activeVehicleId) === v.id ? 'selected' : ''}>${v.name}</option>`
+    `<option value="${v.id}" ${(entry?.vehicleId||State.activeVehicleId)===v.id?'selected':''}>${v.name}</option>`
   ).join('');
 
   document.getElementById('entry-modal-title').textContent = entry ? 'Modifier l\'entrée' : 'Nouvelle entrée';
+
   document.getElementById('entry-modal-body').innerHTML = `
-    <input type="hidden" id="ef-type" value="${selectedType}">
+    <input type="hidden" id="ef-type" value="${selType}">
     <div class="form-group">
       <label class="form-label">Type</label>
       <div class="type-grid">${typeGrid}</div>
@@ -486,75 +465,148 @@ function openEntryForm(entryId = null) {
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Date</label>
-        <input class="form-input" type="date" id="ef-date" value="${entry?.date || today()}">
+        <input class="form-input" type="date" id="ef-date" value="${entry?.date||today()}">
       </div>
       <div class="form-group">
-        <label class="form-label">Kilométrage</label>
-        <input class="form-input" type="number" id="ef-mileage" placeholder="ex: 45000" value="${entry?.mileage || ''}">
+        <label class="form-label">Km au compteur</label>
+        <input class="form-input" type="number" id="ef-mileage" placeholder="ex: 109800" value="${entry?.mileage||''}">
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Description</label>
-      <input class="form-input" type="text" id="ef-desc" placeholder="ex: Grand entretien" value="${entry?.description || ''}">
+
+    <!-- Section carburant — visible seulement si type=carburant -->
+    <div id="fuel-section" style="display:${selType==='carburant'?'block':'none'}">
+      <div class="fuel-form-section">
+        <div class="fuel-section-title">⛽ Détails du plein</div>
+        <div class="form-row">
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Litres</label>
+            <input class="form-input" type="number" id="ef-liters" step="0.01" placeholder="ex: 45.5" value="${entry?.liters||''}" oninput="updatePricePerLiter()">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Montant (€)</label>
+            <input class="form-input" type="number" id="ef-fuel-cost" step="0.01" placeholder="ex: 72.00" value="${entry?.cost||''}" oninput="syncFuelCost(); updatePricePerLiter()">
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:10px;margin-bottom:0">
+          <label class="form-label">Prix / litre <span style="color:var(--teal);font-style:italic;text-transform:none">(calculé)</span></label>
+          <div class="price-per-liter-display" id="price-per-liter">
+            <span>—</span><span>automatique</span>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="form-row">
+
+    <div class="form-group" id="ef-desc-group">
+      <label class="form-label">${selType==='carburant'?'Station / Notes':'Description'}</label>
+      <input class="form-input" type="text" id="ef-desc"
+        placeholder="${selType==='carburant'?'ex: Total Mouscron':'ex: Grand entretien'}"
+        value="${entry?.description||''}">
+    </div>
+
+    <!-- Coût général — caché si carburant car saisi dans fuel-section -->
+    <div id="ef-cost-group" style="display:${selType==='carburant'?'none':'block'}">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Coût (€)</label>
+          <input class="form-input" type="number" id="ef-cost" step="0.01" placeholder="0" value="${entry?.type!=='carburant'?entry?.cost??'':''}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fournisseur</label>
+          <input class="form-input" type="text" id="ef-provider" placeholder="ex: VDC Peruwelz" value="${entry?.provider||''}">
+        </div>
+      </div>
       <div class="form-group">
-        <label class="form-label">Coût (€)</label>
-        <input class="form-input" type="number" id="ef-cost" placeholder="0" step="0.01" value="${entry?.cost ?? ''}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Fournisseur</label>
-        <input class="form-input" type="text" id="ef-provider" placeholder="ex: VDC Peruwelz" value="${entry?.provider || ''}">
+        <label class="form-label">Facture / Référence</label>
+        <input class="form-input" type="text" id="ef-invoice" placeholder="Numéro facture" value="${entry?.invoice||''}">
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Facture / Référence</label>
-      <input class="form-input" type="text" id="ef-invoice" placeholder="Numéro facture" value="${entry?.invoice || ''}">
-    </div>
+
     <div class="form-group">
       <label class="form-label">Notes</label>
-      <textarea class="form-textarea" id="ef-notes" placeholder="Remarques optionnelles...">${entry?.notes || ''}</textarea>
+      <textarea class="form-textarea" id="ef-notes" placeholder="Remarques optionnelles...">${entry?.notes||''}</textarea>
     </div>
-    <button class="btn btn-primary" onclick="saveEntry()">
-      ${entry ? '✓ Enregistrer les modifications' : '✓ Ajouter l\'entrée'}
-    </button>
-    ${entry ? `<div class="delete-zone"><button class="btn btn-danger" onclick="deleteEntry('${entry.id}')">🗑 Supprimer cette entrée</button></div>` : ''}`;
 
+    <button class="btn ${selType==='carburant'?'btn-fuel':'btn-primary'}" id="ef-submit-btn" onclick="saveEntry()">
+      ${entry ? '✓ Enregistrer les modifications' : selType==='carburant'?'⛽ Enregistrer le plein':'✓ Ajouter l\'entrée'}
+    </button>
+    ${entry ? `<div class="delete-zone"><button class="btn btn-danger" onclick="confirmDeleteEntry('${entry.id}')">🗑 Supprimer cette entrée</button></div>` : ''}`;
+
+  if (selType === 'carburant') updatePricePerLiter();
   openModal('entry-modal');
 }
 
 window.selectType = function(el, type) {
-  document.querySelectorAll('#entry-modal-body .type-btn').forEach(b => b.classList.remove('selected'));
-  el.classList.add('selected');
+  document.querySelectorAll('#entry-modal-body .type-btn').forEach(b => {
+    b.classList.remove('selected', 'selected-fuel');
+  });
+  el.classList.add(type === 'carburant' ? 'selected-fuel' : 'selected');
   document.getElementById('ef-type').value = type;
+
+  const isFuel = type === 'carburant';
+  document.getElementById('fuel-section').style.display    = isFuel ? 'block' : 'none';
+  document.getElementById('ef-cost-group').style.display   = isFuel ? 'none'  : 'block';
+  const descLbl = document.querySelector('#ef-desc-group .form-label');
+  const descInp = document.getElementById('ef-desc');
+  descLbl.textContent = isFuel ? 'Station / Notes' : 'Description';
+  descInp.placeholder = isFuel ? 'ex: Total Mouscron' : 'ex: Grand entretien';
+  const btn = document.getElementById('ef-submit-btn');
+  if (btn) {
+    btn.className = 'btn ' + (isFuel ? 'btn-fuel' : 'btn-primary');
+    btn.textContent = isFuel ? '⛽ Enregistrer le plein' : '✓ Ajouter l\'entrée';
+  }
+  if (isFuel) updatePricePerLiter();
 };
 
+window.updatePricePerLiter = function() {
+  const liters = parseFloat(document.getElementById('ef-liters')?.value) || 0;
+  const cost   = parseFloat(document.getElementById('ef-fuel-cost')?.value) || 0;
+  const el     = document.getElementById('price-per-liter');
+  if (!el) return;
+  if (liters > 0 && cost > 0) {
+    el.innerHTML = `<strong style="color:var(--teal);font-size:17px">${(cost/liters).toFixed(3)}€/L</strong><span>automatique</span>`;
+  } else {
+    el.innerHTML = `<span>—</span><span>automatique</span>`;
+  }
+};
+
+window.syncFuelCost = function() { /* cost is already synced via ef-fuel-cost */ };
+
 function saveEntry() {
+  const type = document.getElementById('ef-type').value;
+  const isFuel = type === 'carburant';
+
+  const cost = isFuel
+    ? parseFloat(document.getElementById('ef-fuel-cost')?.value) || 0
+    : parseFloat(document.getElementById('ef-cost')?.value) || 0;
+
+  const desc = document.getElementById('ef-desc').value.trim();
+  if (!desc && !isFuel) { alert('La description est obligatoire.'); return; }
+
   const data = {
     vehicleId:   document.getElementById('ef-vehicle').value,
-    type:        document.getElementById('ef-type').value,
+    type,
     date:        document.getElementById('ef-date').value,
     mileage:     parseInt(document.getElementById('ef-mileage').value) || 0,
-    description: document.getElementById('ef-desc').value.trim(),
-    cost:        parseFloat(document.getElementById('ef-cost').value) || 0,
-    provider:    document.getElementById('ef-provider').value.trim(),
-    invoice:     document.getElementById('ef-invoice').value.trim(),
+    description: desc || (isFuel ? 'Plein de carburant' : ''),
+    cost,
+    provider:    isFuel ? '' : (document.getElementById('ef-provider')?.value.trim() || ''),
+    invoice:     isFuel ? '' : (document.getElementById('ef-invoice')?.value.trim()  || ''),
     notes:       document.getElementById('ef-notes').value.trim(),
+    liters:      isFuel ? (parseFloat(document.getElementById('ef-liters')?.value) || 0) : undefined,
   };
-  if (!data.description) { alert('La description est obligatoire.'); return; }
 
   if (State.editingEntryId) {
     DB.updateEntry(State.editingEntryId, data);
     showToast('Entrée modifiée ✓');
   } else {
     DB.createEntry(data);
-    showToast('Entrée ajoutée ✓');
+    showToast(isFuel ? 'Plein enregistré ⛽' : 'Entrée ajoutée ✓');
   }
   closeModal('entry-modal');
   renderPage(State.currentPage);
 }
 
-function deleteEntry(id) {
+function confirmDeleteEntry(id) {
   if (!confirm('Supprimer cette entrée ?')) return;
   DB.deleteEntry(id);
   showToast('Entrée supprimée');
@@ -562,71 +614,68 @@ function deleteEntry(id) {
   renderPage(State.currentPage);
 }
 
-// ─────────────────────────────────────────────
-// VEHICLE FORM MODAL
-// ─────────────────────────────────────────────
+// ─── VEHICLE FORM ───────────────────────────
 function openVehicleForm(vehicleId = null) {
   State.editingVehicleId = vehicleId;
   const v = vehicleId ? DB.getVehicle(vehicleId) : null;
 
   const swatches = COLORS.map(c =>
-    `<div class="color-swatch ${(v?.color || COLORS[0]) === c ? 'selected' : ''}"
-      style="background:${c}" onclick="selectColor(this,'${c}')" data-color="${c}"></div>`
+    `<div class="color-swatch ${(v?.color||COLORS[0])===c?'selected':''}" style="background:${c}" onclick="selectColor(this,'${c}')"></div>`
   ).join('');
 
   document.getElementById('vf-modal-title').textContent = v ? 'Modifier le véhicule' : 'Nouveau véhicule';
   document.getElementById('vf-modal-body').innerHTML = `
-    <input type="hidden" id="vf-color" value="${v?.color || COLORS[0]}">
+    <input type="hidden" id="vf-color" value="${v?.color||COLORS[0]}">
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Marque</label>
-        <input class="form-input" type="text" id="vf-brand" placeholder="Peugeot" value="${v?.brand || ''}">
+        <input class="form-input" type="text" id="vf-brand" placeholder="Peugeot" value="${v?.brand||''}">
       </div>
       <div class="form-group">
         <label class="form-label">Nom court</label>
-        <input class="form-input" type="text" id="vf-name" placeholder="308 SW" value="${v?.name || ''}">
+        <input class="form-input" type="text" id="vf-name" placeholder="308 SW" value="${v?.name||''}">
       </div>
     </div>
     <div class="form-group">
       <label class="form-label">Modèle complet</label>
-      <input class="form-input" type="text" id="vf-model" placeholder="308 SW 1.2 PureTech EAT8" value="${v?.model || ''}">
+      <input class="form-input" type="text" id="vf-model" placeholder="308 SW 1.2 PureTech EAT8" value="${v?.model||''}">
     </div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Année</label>
-        <input class="form-input" type="number" id="vf-year" placeholder="2019" value="${v?.year || ''}">
+        <input class="form-input" type="number" id="vf-year" placeholder="2019" value="${v?.year||''}">
       </div>
       <div class="form-group">
         <label class="form-label">Carburant</label>
         <select class="form-select" id="vf-fuel">
           ${['Essence','Diesel','Hybride','Électrique','Autre'].map(f =>
-            `<option ${(v?.fuel||'Essence') === f ? 'selected' : ''}>${f}</option>`).join('')}
+            `<option ${(v?.fuel||'Essence')===f?'selected':''}>${f}</option>`).join('')}
         </select>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Plaque</label>
-        <input class="form-input" type="text" id="vf-plate" placeholder="1-ABC-234" value="${v?.licensePlate || ''}">
+        <input class="form-input" type="text" id="vf-plate" placeholder="1-ABC-234" value="${v?.licensePlate||''}">
       </div>
       <div class="form-group">
         <label class="form-label">Km actuels</label>
-        <input class="form-input" type="number" id="vf-mileage" placeholder="0" value="${v?.mileage || ''}">
+        <input class="form-input" type="number" id="vf-mileage" placeholder="0" value="${v?.mileage||''}">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Date d'achat</label>
-        <input class="form-input" type="date" id="vf-purchase-date" value="${v?.purchaseDate || ''}">
+        <input class="form-input" type="date" id="vf-purchase-date" value="${v?.purchaseDate||''}">
       </div>
       <div class="form-group">
         <label class="form-label">Km à l'achat</label>
-        <input class="form-input" type="number" id="vf-purchase-mileage" placeholder="0" value="${v?.purchaseMileage || ''}">
+        <input class="form-input" type="number" id="vf-purchase-mileage" placeholder="0" value="${v?.purchaseMileage||''}">
       </div>
     </div>
     <div class="form-group">
       <label class="form-label">Prix d'achat (€)</label>
-      <input class="form-input" type="number" id="vf-purchase-price" placeholder="0" value="${v?.purchasePrice || ''}">
+      <input class="form-input" type="number" id="vf-purchase-price" placeholder="0" value="${v?.purchasePrice||''}">
     </div>
     <div class="form-group">
       <label class="form-label">Couleur de la fiche</label>
@@ -634,12 +683,12 @@ function openVehicleForm(vehicleId = null) {
     </div>
     <div class="form-group">
       <label class="form-label">Notes</label>
-      <textarea class="form-textarea" id="vf-notes">${v?.notes || ''}</textarea>
+      <textarea class="form-textarea" id="vf-notes">${v?.notes||''}</textarea>
     </div>
     <button class="btn btn-primary" onclick="saveVehicle()">
       ${v ? '✓ Enregistrer' : '✓ Créer le véhicule'}
     </button>
-    ${v ? `<div class="delete-zone"><button class="btn btn-danger" onclick="deleteVehicle('${v.id}')">🗑 Supprimer ce véhicule</button></div>` : ''}`;
+    ${v ? `<div class="delete-zone"><button class="btn btn-danger" onclick="confirmDeleteVehicle('${v.id}')">🗑 Supprimer ce véhicule</button></div>` : ''}`;
 
   openModal('vehicle-modal');
 }
@@ -653,7 +702,6 @@ window.selectColor = function(el, color) {
 function saveVehicle() {
   const name = document.getElementById('vf-name').value.trim();
   if (!name) { alert('Le nom est obligatoire.'); return; }
-
   const data = {
     brand:           document.getElementById('vf-brand').value.trim(),
     name,
@@ -668,7 +716,6 @@ function saveVehicle() {
     color:           document.getElementById('vf-color').value,
     notes:           document.getElementById('vf-notes').value.trim(),
   };
-
   if (State.editingVehicleId) {
     DB.updateVehicle(State.editingVehicleId, data);
     showToast('Véhicule mis à jour ✓');
@@ -681,7 +728,7 @@ function saveVehicle() {
   renderPage(State.currentPage);
 }
 
-function deleteVehicle(id) {
+function confirmDeleteVehicle(id) {
   if (!confirm('Supprimer ce véhicule et toutes ses entrées ? Cette action est irréversible.')) return;
   DB.deleteVehicle(id);
   State.activeVehicleId = DB.getVehicles()[0]?.id || null;
@@ -690,56 +737,33 @@ function deleteVehicle(id) {
   renderPage(State.currentPage);
 }
 
-// ─────────────────────────────────────────────
-// MODAL HELPERS
-// ─────────────────────────────────────────────
-function openModal(id) {
-  document.getElementById(id).classList.add('open');
-}
-function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
-}
+// ─── MODALS ─────────────────────────────────
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
-// ─────────────────────────────────────────────
-// INIT
-// ─────────────────────────────────────────────
+// ─── INIT ───────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  // Seed data from Excel if first launch
   DB.seedDemoData();
+  State.activeVehicleId = DB.getVehicles()[0]?.id || null;
 
-  // Set first vehicle active
-  const vehicles = DB.getVehicles();
-  State.activeVehicleId = vehicles[0]?.id || null;
+  document.querySelectorAll('.nav-item[data-page]').forEach(item =>
+    item.addEventListener('click', () => navigate(item.dataset.page))
+  );
 
-  // Nav
-  document.querySelectorAll('.nav-item[data-page]').forEach(item => {
-    item.addEventListener('click', () => navigate(item.dataset.page));
-  });
-  document.querySelector('.nav-fab').addEventListener('click', openEntryForm);
+  document.querySelectorAll('.modal-overlay').forEach(overlay =>
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(overlay.id); })
+  );
 
-  // Modal close on overlay click
-  document.querySelectorAll('.modal-overlay').forEach(overlay => {
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) closeModal(overlay.id);
-    });
-  });
-
-  // Service Worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/service-worker.js').catch(() => {});
   }
 
-  // Initial render
   navigate('home');
 });
 
-// Expose to inline handlers
-window.openEntryForm    = openEntryForm;
-window.openVehicleForm  = openVehicleForm;
-window.triggerPhotoUpload = triggerPhotoUpload;
-window.navigate         = navigate;
-window.closeModal       = closeModal;
-window.saveEntry        = saveEntry;
-window.saveVehicle      = saveVehicle;
-window.deleteEntry      = deleteEntry;
-window.deleteVehicle    = deleteVehicle;
+// Expose globals
+Object.assign(window, {
+  openEntryForm, openVehicleForm, triggerPhotoUpload,
+  navigate, closeModal, saveEntry, saveVehicle,
+  confirmDeleteEntry, confirmDeleteVehicle, garageDetail,
+});

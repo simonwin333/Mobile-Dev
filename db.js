@@ -165,8 +165,12 @@ const DB = {
     });
 
     [
-      // Carburant historique global 2022-2025
-      { date:'2022-08-13', mileage:42500, type:'carburant', description:'Carburant historique 2022–2025', cost:7986, liters:0, provider:'' },
+      // Carburant historique par année (litres estimés sur base prix moyen Belgique)
+      { date:'2022-12-31', mileage:45600,  type:'carburant', description:'Carburant 2022 (août–déc)', cost:374,  liters:202.2,  provider:'Historique' },
+      { date:'2023-12-31', mileage:68000,  type:'carburant', description:'Carburant 2023',            cost:2449, liters:1423.8, provider:'Historique' },
+      { date:'2024-12-31', mileage:89500,  type:'carburant', description:'Carburant 2024',            cost:2342, liters:1419.4, provider:'Historique' },
+      { date:'2025-12-31', mileage:109800, type:'carburant', description:'Carburant 2025',            cost:2379, liters:1505.7, provider:'Historique' },
+      { date:'2026-03-01', mileage:109800, type:'carburant', description:'Carburant 2026 (à ce jour)',cost:442,  liters:285.2,  provider:'Historique' },
       // Frais
       { date:'2022-08-13', mileage:42500, type:'achat',      description:'Taxe mise en circulation',                        cost:495,  provider:'Taxe',           invoice:'' },
       { date:'2022-08-13', mileage:42500, type:'assurance',  description:'Assurance annuelle',                              cost:320,  provider:'Yuzzu',          invoice:'' },

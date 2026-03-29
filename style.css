@@ -329,8 +329,17 @@ body {
 .fuel-kpi { background: var(--card); border-radius: var(--radius-sm); padding: 10px 8px; text-align: center; border: 1px solid var(--border); }
 .fuel-kpi-val { font-size: 15px; font-weight: 700; font-family: var(--mono); color: var(--teal); }
 .fuel-kpi-lbl { font-size: 10px; color: var(--muted); margin-top: 2px; }
-.fuel-stations { display: flex; gap: 6px; flex-wrap: wrap; }
-.fuel-station-chip { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; font-family: var(--mono); background: var(--teal-dim); border: 1px solid rgba(0,206,201,0.3); color: var(--teal); }
+.fuel-records { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fuel-record { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--card); }
+.fuel-record.green { border-color: rgba(32,208,112,0.3); background: var(--green-dim); }
+.fuel-record.red   { border-color: rgba(255,71,87,0.3);  background: var(--red-dim);   }
+.fuel-record-ico { font-size: 18px; flex-shrink: 0; }
+.fuel-record-body { min-width: 0; }
+.fuel-record-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted2); }
+.fuel-record-val { font-size: 14px; font-weight: 700; font-family: var(--mono); color: var(--text); margin-top: 1px; }
+.fuel-record.green .fuel-record-val { color: var(--green); }
+.fuel-record.red   .fuel-record-val { color: var(--red); }
+.fuel-record-sub { font-size: 10px; color: var(--muted2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Échéances */
 .deadlines-list { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }

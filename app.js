@@ -450,11 +450,12 @@ async function renderStats() {
   const maxLiters  = Math.max(...consoYears.map(y => consoByYear[y].liters), 1);
   const avgPricePerL = s.totalLiters > 0 ? s.totalFuel / s.totalLiters : 0;
 
-  // Prix/litre des 5 derniers pleins
-  const lastFuelEntries = entries
-    .filter(e => e.type === 'carburant' && e.liters > 0 && e.cost > 0 && e.provider)
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .slice(0, 5);
+  // Records carburant
+  const fuelWithPpl = entries
+    .filter(e => e.type === 'carburant' && e.liters > 0 && e.cost > 0)
+    .map(e => ({ ...e, ppl: parseFloat(e.cost) / parseFloat(e.liters) }));
+  const cheapest = fuelWithPpl.length ? fuelWithPpl.reduce((a, b) => a.ppl < b.ppl ? a : b) : null;
+  const priciest = fuelWithPpl.length ? fuelWithPpl.reduce((a, b) => a.ppl > b.ppl ? a : b) : null;
 
   // ── Calculs échéances ──
   const deadlines = _computeDeadlines(v, s, entries);
@@ -492,10 +493,25 @@ async function renderStats() {
     </div>`;
   }).join('');
 
-  const lastFuelChips = lastFuelEntries.map(e => {
-    const ppl = (parseFloat(e.cost) / parseFloat(e.liters)).toFixed(3);
-    return `<div class="fuel-station-chip">${ppl}€/L · ${e.provider}</div>`;
-  }).join('');
+  const recordsHtml = (cheapest && priciest) ? `
+    <div class="fuel-records">
+      <div class="fuel-record green">
+        <div class="fuel-record-ico">🏆</div>
+        <div class="fuel-record-body">
+          <div class="fuel-record-lbl">Moins cher</div>
+          <div class="fuel-record-val">${cheapest.ppl.toFixed(3)}€/L</div>
+          <div class="fuel-record-sub">${fmtDate(cheapest.date)}${cheapest.provider ? ' · '+cheapest.provider : ''}</div>
+        </div>
+      </div>
+      <div class="fuel-record red">
+        <div class="fuel-record-ico">📈</div>
+        <div class="fuel-record-body">
+          <div class="fuel-record-lbl">Plus cher</div>
+          <div class="fuel-record-val">${priciest.ppl.toFixed(3)}€/L</div>
+          <div class="fuel-record-sub">${fmtDate(priciest.date)}${priciest.provider ? ' · '+priciest.provider : ''}</div>
+        </div>
+      </div>
+    </div>` : '';
 
   // ── Render échéances ──
   const deadlineRows = deadlines.map(d => {
@@ -598,7 +614,7 @@ async function renderStats() {
           <div class="stat-card-sub" style="margin-bottom:8px">Litres enregistrés par année</div>
           ${fuelBars}
         </div>
-        ${lastFuelChips ? `<div style="margin-top:12px"><div class="stat-card-sub" style="margin-bottom:8px">Derniers pleins</div><div class="fuel-stations">${lastFuelChips}</div></div>` : ''}
+        ${recordsHtml ? `<div style="margin-top:12px"><div class="stat-card-sub" style="margin-bottom:8px">Records</div>${recordsHtml}</div>` : ''}
       </div>
 
       <!-- Échéances -->

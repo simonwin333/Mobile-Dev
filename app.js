@@ -1,6 +1,13 @@
 /* ═══════════════════════════════════════════════
-   Mobile Dev — app.js v3
+   Mobile Dev — app.js v4 (Firebase)
 ═══════════════════════════════════════════════ */
+
+import {
+  onAuthReady, signInWithGoogle, signOutUser, getCurrentUser, seedDemoData,
+  getVehicles, getVehicle, createVehicle, updateVehicle, deleteVehicle,
+  getEntries, getEntry, createEntry, updateEntry, deleteEntry,
+  getVehicleStats,
+} from './db.js';
 
 // ─── STATE ──────────────────────────────────
 const State = {
@@ -11,8 +18,7 @@ const State = {
   editingVehicleId: null,
 };
 
-// ─── TYPES ─────────────────────────────────
-// Carburant en 2e position pour être juste après "Tous" dans les filtres
+// ─── TYPES ──────────────────────────────────
 const TYPES = {
   entretien:  { label:'Entretien',  ico:'🔧', color:'blue'   },
   carburant:  { label:'Carburant',  ico:'⛽', color:'teal'   },
@@ -43,6 +49,10 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2200);
 }
 
+function showLoader(show) {
+  document.getElementById('app-loader').style.display = show ? 'flex' : 'none';
+}
+
 // ─── NAVIGATION ─────────────────────────────
 function navigate(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -54,21 +64,25 @@ function navigate(page) {
   renderPage(page);
 }
 
-function renderPage(p) {
-  if (p === 'home')    renderHome();
-  if (p === 'garage')  renderGarage();
-  if (p === 'history') renderHistory();
-  if (p === 'stats')   renderStats();
+async function renderPage(p) {
+  showLoader(true);
+  try {
+    if (p === 'home')    await renderHome();
+    if (p === 'garage')  await renderGarage();
+    if (p === 'history') await renderHistory();
+    if (p === 'stats')   await renderStats();
+  } finally {
+    showLoader(false);
+  }
 }
 
 // ─── HOME ───────────────────────────────────
-function renderHome() {
-  const vehicles = DB.getVehicles();
+async function renderHome() {
+  const vehicles = await getVehicles();
   if (!State.activeVehicleId || !vehicles.find(v => v.id === State.activeVehicleId)) {
     State.activeVehicleId = vehicles[0]?.id || null;
   }
 
-  // Pills — sans pill "+ Ajouter"
   const pillsWrap = document.getElementById('home-pills');
   pillsWrap.innerHTML = '';
   vehicles.forEach(v => {
@@ -79,7 +93,7 @@ function renderHome() {
     pillsWrap.appendChild(pill);
   });
 
-  const vehicle = DB.getVehicle(State.activeVehicleId);
+  const vehicle = vehicles.find(v => v.id === State.activeVehicleId) || null;
   if (!vehicle) {
     document.getElementById('home-panel').innerHTML =
       `<div class="empty-state"><div class="empty-ico">🚗</div><p>Aucun véhicule.<br>Rendez-vous dans <b>Garage</b> pour en ajouter un.</p></div>`;
@@ -87,13 +101,13 @@ function renderHome() {
     document.getElementById('home-recent').innerHTML = '';
     return;
   }
-  renderVehiclePanel(vehicle);
-  renderNextService(vehicle);
-  renderRecentEntries(vehicle);
+  const stats = await getVehicleStats(vehicle.id);
+  renderVehiclePanel(vehicle, stats);
+  renderNextService(vehicle, stats);
+  await renderRecentEntries(vehicle);
 }
 
-function renderVehiclePanel(vehicle) {
-  const stats   = DB.getVehicleStats(vehicle.id);
+function renderVehiclePanel(vehicle, stats) {
   const panel   = document.getElementById('home-panel');
   const hasPhoto = !!vehicle.photo;
   const heroBg  = hasPhoto
@@ -133,19 +147,14 @@ function renderVehiclePanel(vehicle) {
     </div>`;
 }
 
-// ── Bannière prochain entretien ──────────────
-function renderNextService(vehicle) {
-  const stats = DB.getVehicleStats(vehicle.id);
+function renderNextService(vehicle, stats) {
   const wrap  = document.getElementById('home-next-service');
-
-  // Bouton ajouter entrée (toujours présent, au-dessus ou en-dessous de la bannière)
   const addBtn = `<div class="v-action-full" onclick="openEntryForm()" style="margin:0 16px 16px;border-radius:14px;border:1px solid var(--border)">
     <span class="v-action-ico">➕</span>
     <span class="v-action-txt">Ajouter une entrée</span>
   </div>`;
 
   if (!vehicle.serviceInterval) {
-    // Pas d'intervalle configuré
     wrap.innerHTML = `
       <div class="next-service-banner" onclick="openVehicleForm('${vehicle.id}')">
         <div class="nsb-ico">🔧</div>
@@ -196,8 +205,8 @@ function renderNextService(vehicle) {
     ${addBtn}`;
 }
 
-function renderRecentEntries(vehicle) {
-  const entries = DB.getEntries(vehicle.id)
+async function renderRecentEntries(vehicle) {
+  const entries = (await getEntries(vehicle.id))
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 5);
 
@@ -215,8 +224,8 @@ function renderRecentEntries(vehicle) {
 }
 
 // ─── HISTORY ────────────────────────────────
-function renderHistory() {
-  const vehicles = DB.getVehicles();
+async function renderHistory() {
+  const vehicles = await getVehicles();
   if (!State.activeVehicleId || !vehicles.find(v => v.id === State.activeVehicleId)) {
     State.activeVehicleId = vehicles[0]?.id || null;
   }
@@ -231,7 +240,6 @@ function renderHistory() {
     pillsWrap.appendChild(pill);
   });
 
-  // Filtres — Carburant en 2e position juste après "Tous"
   const filterBar = document.getElementById('history-filters');
   filterBar.innerHTML = '';
   [{ key:'all', label:'Tous' }, ...Object.entries(TYPES).map(([k,t]) => ({ key:k, label:t.label }))]
@@ -243,12 +251,12 @@ function renderHistory() {
       filterBar.appendChild(pill);
     });
 
-  const vehicle = DB.getVehicle(State.activeVehicleId);
+  const vehicle = vehicles.find(v => v.id === State.activeVehicleId);
   const wrap = document.getElementById('history-timeline');
   wrap.innerHTML = '';
   if (!vehicle) { wrap.innerHTML = '<div class="empty-state"><p>Sélectionnez un véhicule</p></div>'; return; }
 
-  let entries = DB.getEntries(vehicle.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+  let entries = (await getEntries(vehicle.id)).sort((a,b) => new Date(b.date) - new Date(a.date));
   if (State.historyFilter !== 'all') entries = entries.filter(e => e.type === State.historyFilter);
 
   if (!entries.length) {
@@ -285,7 +293,6 @@ function buildEntryEl(entry, showActions) {
   const costClass = isFuel ? 'fuel' : costFree ? 'free' : '';
   const costTxt   = costFree && !isFuel ? 'Gratuit' : fmtEur(entry.cost);
 
-  // Prix/litre calculé discrètement si données disponibles
   const ppl = (isFuel && entry.liters && entry.cost)
     ? (parseFloat(entry.cost) / parseFloat(entry.liters)).toFixed(3) + '€/L'
     : null;
@@ -323,13 +330,13 @@ function buildEntryEl(entry, showActions) {
 }
 
 // ─── GARAGE ─────────────────────────────────
-function renderGarage() {
-  const vehicles = DB.getVehicles();
+async function renderGarage() {
+  const vehicles = await getVehicles();
   const wrap = document.getElementById('garage-list');
   wrap.innerHTML = '';
 
-  vehicles.forEach(v => {
-    const stats   = DB.getVehicleStats(v.id);
+  for (const v of vehicles) {
+    const stats   = await getVehicleStats(v.id);
     const hasPhoto = !!v.photo;
     const heroBg  = hasPhoto
       ? `background-image:url('${v.photo}');background-size:cover;background-position:center;`
@@ -365,7 +372,7 @@ function renderGarage() {
         </div>
       </div>`;
     wrap.appendChild(card);
-  });
+  }
 
   const addCard = document.createElement('div');
   addCard.className = 'garage-add-card';
@@ -380,8 +387,8 @@ function garageDetail(vehicleId) {
 }
 
 // ─── STATS ──────────────────────────────────
-function renderStats() {
-  const vehicles = DB.getVehicles();
+async function renderStats() {
+  const vehicles = await getVehicles();
   if (!State.activeVehicleId || !vehicles.find(v => v.id === State.activeVehicleId)) {
     State.activeVehicleId = vehicles[0]?.id || null;
   }
@@ -396,11 +403,11 @@ function renderStats() {
     pillsWrap.appendChild(pill);
   });
 
-  const v = DB.getVehicle(State.activeVehicleId);
+  const v = vehicles.find(vv => vv.id === State.activeVehicleId);
   const wrap = document.getElementById('stats-content');
   if (!v) { wrap.innerHTML = ''; return; }
 
-  const s = DB.getVehicleStats(v.id);
+  const s = await getVehicleStats(v.id);
   const years  = Object.keys(s.byYear).sort((a,b) => b - a);
   const maxYr  = Math.max(...Object.values(s.byYear), 1);
   const yearBars = years.map(y => `
@@ -471,7 +478,7 @@ function triggerPhotoUpload(vehicleId) {
     const reader = new FileReader();
     reader.onload = ev => {
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
         const canvas = document.createElement('canvas');
         const MAX = 800;
         let w = img.width, h = img.height;
@@ -479,7 +486,7 @@ function triggerPhotoUpload(vehicleId) {
         if (h > MAX) { w = w * MAX / h; h = MAX; }
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        DB.updateVehicle(vehicleId, { photo: canvas.toDataURL('image/jpeg', 0.75) });
+        await updateVehicle(vehicleId, { photo: canvas.toDataURL('image/jpeg', 0.75) });
         showToast('Photo mise à jour ✓');
         renderPage(State.currentPage);
       };
@@ -491,10 +498,10 @@ function triggerPhotoUpload(vehicleId) {
 }
 
 // ─── ENTRY FORM ─────────────────────────────
-function openEntryForm(entryId = null) {
+async function openEntryForm(entryId = null) {
   State.editingEntryId = entryId;
-  const entry    = entryId ? DB.getEntry(entryId) : null;
-  const vehicles = DB.getVehicles();
+  const entry    = entryId ? await getEntry(entryId) : null;
+  const vehicles = await getVehicles();
   let selType    = entry?.type || 'entretien';
 
   const typeGrid = Object.entries(TYPES).map(([k, t]) => {
@@ -511,7 +518,6 @@ function openEntryForm(entryId = null) {
   ).join('');
 
   document.getElementById('entry-modal-title').textContent = entry ? 'Modifier l\'entrée' : 'Nouvelle entrée';
-
   document.getElementById('entry-modal-body').innerHTML = `
     <input type="hidden" id="ef-type" value="${selType}">
     <div class="form-group">
@@ -532,7 +538,6 @@ function openEntryForm(entryId = null) {
         <input class="form-input" type="number" id="ef-mileage" placeholder="ex: 109800" value="${entry?.mileage||''}">
       </div>
     </div>
-
     <div id="fuel-section" style="display:${selType==='carburant'?'block':'none'}">
       <div class="fuel-form-section">
         <div class="fuel-section-title">⛽ Détails du plein</div>
@@ -554,14 +559,12 @@ function openEntryForm(entryId = null) {
         </div>
       </div>
     </div>
-
     <div class="form-group" id="ef-desc-group">
       <label class="form-label">${selType==='carburant'?'Station / Notes':'Description'}</label>
       <input class="form-input" type="text" id="ef-desc"
         placeholder="${selType==='carburant'?'ex: Total Mouscron':'ex: Grand entretien'}"
         value="${entry?.description||''}">
     </div>
-
     <div id="ef-cost-group" style="display:${selType==='carburant'?'none':'block'}">
       <div class="form-row">
         <div class="form-group">
@@ -581,12 +584,10 @@ function openEntryForm(entryId = null) {
           value="${entry?.invoice||''}">
       </div>
     </div>
-
     <div class="form-group">
       <label class="form-label">Notes</label>
       <textarea class="form-textarea" id="ef-notes" placeholder="Remarques optionnelles...">${entry?.notes||''}</textarea>
     </div>
-
     <button class="btn ${selType==='carburant'?'btn-fuel':'btn-primary'}" id="ef-submit-btn" onclick="saveEntry()">
       ${entry ? '✓ Enregistrer les modifications' : selType==='carburant'?'⛽ Enregistrer le plein':'✓ Ajouter l\'entrée'}
     </button>
@@ -625,7 +626,7 @@ window.updatePricePerLiter = function() {
     : `<span>—</span><span>automatique</span>`;
 };
 
-function saveEntry() {
+async function saveEntry() {
   const type   = document.getElementById('ef-type').value;
   const isFuel = type === 'carburant';
   const cost   = isFuel
@@ -646,29 +647,35 @@ function saveEntry() {
     liters:      isFuel ? (parseFloat(document.getElementById('ef-liters')?.value)||0) : undefined,
   };
 
-  if (State.editingEntryId) {
-    DB.updateEntry(State.editingEntryId, data);
-    showToast('Entrée modifiée ✓');
-  } else {
-    DB.createEntry(data);
-    showToast(isFuel ? 'Plein enregistré ⛽' : 'Entrée ajoutée ✓');
+  showLoader(true);
+  try {
+    if (State.editingEntryId) {
+      await updateEntry(State.editingEntryId, data);
+      showToast('Entrée modifiée ✓');
+    } else {
+      await createEntry(data);
+      showToast(isFuel ? 'Plein enregistré ⛽' : 'Entrée ajoutée ✓');
+    }
+  } finally {
+    showLoader(false);
   }
   closeModal('entry-modal');
   renderPage(State.currentPage);
 }
 
-function confirmDeleteEntry(id) {
+async function confirmDeleteEntry(id) {
   if (!confirm('Supprimer cette entrée ?')) return;
-  DB.deleteEntry(id);
+  showLoader(true);
+  try { await deleteEntry(id); } finally { showLoader(false); }
   showToast('Entrée supprimée');
   closeModal('entry-modal');
   renderPage(State.currentPage);
 }
 
-// ─── VEHICLE FORM — sans sélecteur de couleur ──
-function openVehicleForm(vehicleId = null) {
+// ─── VEHICLE FORM ───────────────────────────
+async function openVehicleForm(vehicleId = null) {
   State.editingVehicleId = vehicleId;
-  const v = vehicleId ? DB.getVehicle(vehicleId) : null;
+  const v = vehicleId ? await getVehicle(vehicleId) : null;
 
   document.getElementById('vf-modal-title').textContent = v ? 'Modifier le véhicule' : 'Nouveau véhicule';
   document.getElementById('vf-modal-body').innerHTML = `
@@ -727,7 +734,7 @@ function openVehicleForm(vehicleId = null) {
       <div class="form-group">
         <label class="form-label">Intervalle entretien (km)</label>
         <input class="form-input" type="number" id="vf-service-interval" placeholder="ex: 15000" value="${v?.serviceInterval||''}">
-        <div class="form-hint">Km entre 2 entretiens — affiche la prochaine échéance sur l'accueil</div>
+        <div class="form-hint">Km entre 2 entretiens</div>
       </div>
     </div>
     <div class="form-group">
@@ -742,7 +749,7 @@ function openVehicleForm(vehicleId = null) {
   openModal('vehicle-modal');
 }
 
-function saveVehicle() {
+async function saveVehicle() {
   const name = document.getElementById('vf-name').value.trim();
   if (!name) { alert('Le nom est obligatoire.'); return; }
   const data = {
@@ -759,27 +766,55 @@ function saveVehicle() {
     serviceInterval: parseInt(document.getElementById('vf-service-interval').value) || '',
     notes:           document.getElementById('vf-notes').value.trim(),
   };
-  if (State.editingVehicleId) {
-    DB.updateVehicle(State.editingVehicleId, data);
-    showToast('Véhicule mis à jour ✓');
-  } else {
-    // Couleur auto parmi la palette selon l'index
-    const idx = DB.getVehicles().length % COLORS.length;
-    const v = DB.createVehicle({ ...data, color: COLORS[idx], photo: null });
-    State.activeVehicleId = v.id;
-    showToast('Véhicule créé ✓');
+
+  showLoader(true);
+  try {
+    if (State.editingVehicleId) {
+      await updateVehicle(State.editingVehicleId, data);
+      showToast('Véhicule mis à jour ✓');
+    } else {
+      const vehicles = await getVehicles();
+      const idx = vehicles.length % COLORS.length;
+      const v = await createVehicle({ ...data, color: COLORS[idx], photo: null });
+      State.activeVehicleId = v.id;
+      showToast('Véhicule créé ✓');
+    }
+  } finally {
+    showLoader(false);
   }
   closeModal('vehicle-modal');
   renderPage(State.currentPage);
 }
 
-function confirmDeleteVehicle(id) {
+async function confirmDeleteVehicle(id) {
   if (!confirm('Supprimer ce véhicule et toutes ses entrées ? Cette action est irréversible.')) return;
-  DB.deleteVehicle(id);
-  State.activeVehicleId = DB.getVehicles()[0]?.id || null;
+  showLoader(true);
+  try { await deleteVehicle(id); } finally { showLoader(false); }
+  const vehicles = await getVehicles();
+  State.activeVehicleId = vehicles[0]?.id || null;
   showToast('Véhicule supprimé');
   closeModal('vehicle-modal');
   renderPage(State.currentPage);
+}
+
+// ─── COMPTE UTILISATEUR ─────────────────────
+function showUserMenu() {
+  const user = getCurrentUser();
+  document.getElementById('user-modal-body').innerHTML = `
+    <div class="user-info">
+      <div class="user-avatar">${user?.photoURL ? `<img src="${user.photoURL}" width="56" height="56" style="border-radius:50%">` : '👤'}</div>
+      <div class="user-name">${user?.displayName || 'Utilisateur'}</div>
+      <div class="user-email">${user?.email || ''}</div>
+    </div>
+    <button class="btn btn-secondary" onclick="handleSignOut()" style="margin-top:20px">
+      🚪 Se déconnecter
+    </button>`;
+  openModal('user-modal');
+}
+
+async function handleSignOut() {
+  if (!confirm('Se déconnecter ?')) return;
+  await signOutUser();
 }
 
 // ─── MODALS ─────────────────────────────────
@@ -788,8 +823,27 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 
 // ─── INIT ───────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  DB.seedDemoData();
-  State.activeVehicleId = DB.getVehicles()[0]?.id || null;
+  showLoader(true);
+
+  onAuthReady(async user => {
+    if (user) {
+      // Connecté → afficher l'app
+      document.getElementById('page-login').style.display = 'none';
+      document.getElementById('bottom-nav').style.display = 'flex';
+      showLoader(true);
+      await seedDemoData();
+      State.activeVehicleId = (await getVehicles())[0]?.id || null;
+      showLoader(false);
+      navigate('home');
+    } else {
+      // Non connecté → afficher login
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-login').classList.add('active');
+      document.getElementById('page-login').style.display = '';
+      document.getElementById('bottom-nav').style.display = 'none';
+      showLoader(false);
+    }
+  });
 
   document.querySelectorAll('.nav-item[data-page]').forEach(item =>
     item.addEventListener('click', () => navigate(item.dataset.page))
@@ -797,14 +851,17 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.modal-overlay').forEach(overlay =>
     overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(overlay.id); })
   );
+
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+    navigator.serviceWorker.register('/Mobile-Dev/service-worker.js').catch(() => {});
   }
-  navigate('home');
 });
 
+// Exposer les fonctions au HTML
 Object.assign(window, {
+  signInWithGoogle,
   openEntryForm, openVehicleForm, triggerPhotoUpload,
   navigate, closeModal, saveEntry, saveVehicle,
   confirmDeleteEntry, confirmDeleteVehicle, garageDetail,
+  showUserMenu, handleSignOut,
 });

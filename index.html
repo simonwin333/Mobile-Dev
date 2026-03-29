@@ -16,17 +16,30 @@
 <body>
 <div id="app">
 
+  <!-- ── ÉCRAN DE CONNEXION ─────────────── -->
+  <div id="page-login" class="page active login-page">
+    <div class="login-wrap">
+      <div class="login-logo">🚗</div>
+      <div class="login-title">Mobile Dev</div>
+      <div class="login-sub">Gestion de vos véhicules</div>
+      <button class="btn-google" id="btn-google-login" onclick="signInWithGoogle()">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="20">
+        Continuer avec Google
+      </button>
+      <div class="login-hint">Vos données sont sauvegardées<br>dans le cloud, sur votre compte Google.</div>
+    </div>
+  </div>
+
   <!-- ── PAGE : ACCUEIL ─────────────────── -->
-  <div id="page-home" class="page active">
+  <div id="page-home" class="page">
     <div class="topbar">
       <span class="topbar-title">Mobile Dev</span>
       <div class="topbar-actions">
-        <div class="icon-btn" title="Connexion (bientôt)" style="opacity:0.35;cursor:default">👤</div>
+        <div class="icon-btn" id="btn-user" title="Mon compte" onclick="showUserMenu()">👤</div>
       </div>
     </div>
     <div class="v-selector-wrap" id="home-pills"></div>
     <div id="home-panel"></div>
-    <!-- Bannière prochain entretien + bouton Ajouter -->
     <div id="home-next-service"></div>
     <div id="home-recent"></div>
   </div>
@@ -59,7 +72,7 @@
   </div>
 
   <!-- ── BOTTOM NAV ────────────────────── -->
-  <nav class="bottom-nav">
+  <nav class="bottom-nav" id="bottom-nav" style="display:none">
     <div class="nav-item active" data-page="home">
       <span class="nav-ico">🏠</span>
       <span class="nav-lbl">Accueil</span>
@@ -96,10 +109,26 @@
     </div>
   </div>
 
+  <!-- ── MODAL : COMPTE ────────────────── -->
+  <div class="modal-overlay" id="user-modal">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Mon compte</div>
+      <div class="modal-body" id="user-modal-body"></div>
+    </div>
+  </div>
+
+  <!-- ── LOADER ────────────────────────── -->
+  <div id="app-loader">
+    <div class="loader-ico">🚗</div>
+    <div class="loader-txt">Chargement…</div>
+  </div>
+
   <div id="toast"></div>
 </div>
 
-<script src="db.js"></script>
-<script src="app.js"></script>
+<!-- Firebase SDK -->
+<script type="module" src="db.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

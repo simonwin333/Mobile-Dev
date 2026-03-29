@@ -473,6 +473,25 @@ body {
 .sec-title { font-size: 15px; font-weight: 700; }
 .sec-link  { font-size: 13px; color: var(--blue); cursor: pointer; }
 
+/* ── Bannière mise à jour ─────────────────── */
+#update-banner {
+  display: none;
+  position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 430px; z-index: 600;
+  background: var(--blue); color: white;
+  padding: 10px 16px;
+  align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 13px; font-weight: 500;
+}
+#update-banner.show { display: flex; }
+#update-banner button {
+  background: white; color: var(--blue);
+  border: none; border-radius: 8px;
+  padding: 5px 12px; font-size: 12px; font-weight: 700;
+  cursor: pointer; white-space: nowrap; font-family: var(--font);
+  flex-shrink: 0;
+}
+
 /* ── Toast ────────────────────────────────── */
 #toast {
   position: fixed; bottom: calc(var(--nav-h) + 14px); left: 50%; transform: translateX(-50%) translateY(16px);

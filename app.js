@@ -1106,13 +1106,34 @@ document.addEventListener('DOMContentLoaded', () => {
   );
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/Mobile-Dev/service-worker.js').catch(() => {});
+    navigator.serviceWorker.register('/Mobile-Dev/service-worker.js').then(reg => {
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            // Nouvelle version prête → afficher la bannière
+            document.getElementById('update-banner').classList.add('show');
+            window._pendingWorker = newWorker;
+          }
+        });
+      });
+    }).catch(() => {});
   }
 });
 
+// ─── MISE À JOUR ────────────────────────────
+function applyUpdate() {
+  if (window._pendingWorker) {
+    window._pendingWorker.postMessage('SKIP_WAITING');
+  }
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    window.location.reload();
+  });
+}
+
 // Exposer les fonctions au HTML
 Object.assign(window, {
-  signInWithGoogle,
+  signInWithGoogle, applyUpdate,
   openEntryForm, openVehicleForm, triggerPhotoUpload,
   navigate, closeModal, saveEntry, saveVehicle,
   confirmDeleteEntry, confirmDeleteVehicle, garageDetail,

@@ -408,23 +408,120 @@ async function renderStats() {
   if (!v) { wrap.innerHTML = ''; return; }
 
   const s = await getVehicleStats(v.id);
-  const years  = Object.keys(s.byYear).sort((a,b) => b - a);
-  const maxYr  = Math.max(...Object.values(s.byYear), 1);
-  const yearBars = years.map(y => `
-    <div class="bar-row">
-      <div class="bar-label">${y}</div>
-      <div class="bar-track"><div class="bar-fill" style="width:${(s.byYear[y]/maxYr*100).toFixed(1)}%"></div></div>
-      <div class="bar-val">${fmtEur(s.byYear[y])}</div>
-    </div>`).join('');
+  const entries = await getEntries(v.id);
 
+  // ── Calculs coût mensuel ──
+  const purchaseDate = v.purchaseDate ? new Date(v.purchaseDate) : null;
+  const now = new Date();
+  const monthsOwned = purchaseDate
+    ? Math.max(1, (now.getFullYear() - purchaseDate.getFullYear()) * 12 + (now.getMonth() - purchaseDate.getMonth()))
+    : 1;
+  const byTypeMontly = {};
+  Object.entries(s.byType).forEach(([type, cost]) => {
+    byTypeMontly[type] = cost / monthsOwned;
+  });
+  const totalMonthly = (s.totalOther + s.totalFuel) / monthsOwned;
+  const maxMonthly = Math.max(...Object.values(byTypeMontly), 1);
+
+  // ── Calculs carburant ──
+  const fuelEntries = entries.filter(e => e.type === 'carburant' && e.liters > 0 && e.mileage > 0);
+  // Conso aux 100 par année
+  const consoByYear = {};
+  const costByYear  = {};
+  entries.filter(e => e.type === 'carburant' && e.liters > 0).forEach(e => {
+    const y = e.date ? new Date(e.date).getFullYear() : null;
+    if (!y) return;
+    if (!consoByYear[y]) { consoByYear[y] = { liters: 0, cost: 0 }; }
+    consoByYear[y].liters += parseFloat(e.liters) || 0;
+    consoByYear[y].cost   += parseFloat(e.cost)   || 0;
+  });
+  // Km parcourus par année (estimé via km des entrées carbu)
+  const kmByYear = {};
+  const sortedFuel = entries.filter(e => e.type === 'carburant' && e.mileage > 0)
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+  sortedFuel.forEach((e, i) => {
+    const y = new Date(e.date).getFullYear();
+    if (i === 0) return;
+    const prev = sortedFuel[i - 1];
+    const km = (e.mileage || 0) - (prev.mileage || 0);
+    if (km > 0) kmByYear[y] = (kmByYear[y] || 0) + km;
+  });
+  const consoYears = Object.keys(consoByYear).sort((a,b) => a - b);
+  const maxLiters  = Math.max(...consoYears.map(y => consoByYear[y].liters), 1);
+  const avgPricePerL = s.totalLiters > 0 ? s.totalFuel / s.totalLiters : 0;
+
+  // Prix/litre des 5 derniers pleins
+  const lastFuelEntries = entries
+    .filter(e => e.type === 'carburant' && e.liters > 0 && e.cost > 0 && e.provider)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 5);
+
+  // ── Calculs échéances ──
+  const deadlines = _computeDeadlines(v, s, entries);
+  const deadlineTotal3m = deadlines
+    .filter(d => d.monthsAway !== null && d.monthsAway <= 3)
+    .reduce((sum, d) => sum + d.amount, 0);
+
+  // ── Render barres par type (coût mensuel) ──
   const typeColors = {
     entretien:'var(--blue)', reparation:'var(--orange)', assurance:'var(--green)',
     taxe:'var(--purple)', controle:'var(--yellow)', pneus:'var(--muted2)',
     carburant:'var(--teal)', achat:'var(--red)', autre:'var(--muted)'
   };
+  const monthlyBars = Object.entries(byTypeMontly)
+    .filter(([, v]) => v > 0.5)
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, mCost]) => {
+      const t = TYPES[type] || TYPES.autre;
+      const pct = (mCost / maxMonthly * 100).toFixed(1);
+      return `<div class="bar-row">
+        <div class="bar-label-ico">${t.ico} ${t.label}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${typeColors[type]||'var(--muted)'}"></div></div>
+        <div class="bar-val">${fmtEur(mCost)}</div>
+      </div>`;
+    }).join('');
+
+  // ── Render barres carburant par année ──
+  const fuelBars = consoYears.map(y => {
+    const pct = (consoByYear[y].liters / maxLiters * 100).toFixed(1);
+    const isCurrentYear = parseInt(y) === now.getFullYear();
+    return `<div class="bar-row">
+      <div class="bar-label">${y}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:var(--teal);${isCurrentYear?'opacity:0.55':''}"></div></div>
+      <div class="bar-val teal">${Math.round(consoByYear[y].liters)} L</div>
+    </div>`;
+  }).join('');
+
+  const lastFuelChips = lastFuelEntries.map(e => {
+    const ppl = (parseFloat(e.cost) / parseFloat(e.liters)).toFixed(3);
+    return `<div class="fuel-station-chip">${ppl}€/L · ${e.provider}</div>`;
+  }).join('');
+
+  // ── Render échéances ──
+  const deadlineRows = deadlines.map(d => {
+    let badge, badgeCls;
+    if (d.monthsAway === null)       { badge = d.badgeTxt; badgeCls = 'badge-muted'; }
+    else if (d.monthsAway <= 1)      { badge = 'Ce mois';  badgeCls = 'badge-warn'; }
+    else if (d.monthsAway <= 3)      { badge = `${d.monthsAway} mois`; badgeCls = 'badge-soon'; }
+    else                             { badge = `${d.monthsAway} mois`; badgeCls = 'badge-muted'; }
+    const urgent = d.monthsAway !== null && d.monthsAway <= 1;
+    return `<div class="deadline-row${urgent?' deadline-urgent':''}">
+      <div class="deadline-ico" style="background:${d.bg}">${d.ico}</div>
+      <div class="deadline-body">
+        <div class="deadline-title">${d.label}</div>
+        <div class="deadline-sub">${d.sub}</div>
+      </div>
+      <div class="deadline-right">
+        <div class="deadline-amount">${fmtEur(d.amount)}</div>
+        <div class="deadline-badge ${badgeCls}">${badge}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // ── Render répartition par type ──
   const total = s.totalOther + s.totalFuel;
   const typeRows = Object.entries(s.byType)
-    .sort((a,b) => b[1] - a[1])
+    .sort((a, b) => b[1] - a[1])
     .map(([type, cost]) => {
       const t = TYPES[type] || TYPES.autre;
       const pct = total > 0 ? (cost / total * 100).toFixed(0) : 0;
@@ -435,8 +532,20 @@ async function renderStats() {
       </div>`;
     }).join('');
 
+  // ── Render année par année ──
+  const years = Object.keys(s.byYear).sort((a, b) => b - a);
+  const maxYr = Math.max(...Object.values(s.byYear), 1);
+  const yearBars = years.map(y => `
+    <div class="bar-row">
+      <div class="bar-label">${y}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(s.byYear[y]/maxYr*100).toFixed(1)}%"></div></div>
+      <div class="bar-val">${fmtEur(s.byYear[y])}</div>
+    </div>`).join('');
+
   wrap.innerHTML = `
     <div class="stats-grid">
+
+      <!-- Cartes résumé -->
       <div class="stat-card">
         <div class="stat-card-label">Frais hors carbu</div>
         <div class="stat-card-val">${fmtEur(s.totalOther)}</div>
@@ -457,15 +566,143 @@ async function renderStats() {
         <div class="stat-card-val">${fmtEur(s.totalAllInclPurchase)}</div>
         <div class="stat-card-sub">Tout inclus</div>
       </div>
+
+      <!-- Coût mensuel moyen -->
+      <div class="stat-card full">
+        <div class="stat-card-label">Coût mensuel moyen</div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:14px">
+          <span class="stat-card-val" style="font-size:26px">${fmtEur(totalMonthly)}</span>
+          <span class="stat-card-sub" style="margin:0">/ mois · hors achat · ${monthsOwned} mois</span>
+        </div>
+        <div class="bar-chart">${monthlyBars}</div>
+      </div>
+
+      <!-- Carburant -->
+      <div class="stat-card full">
+        <div class="stat-card-label">Tableau de bord carburant</div>
+        <div class="fuel-summary-grid">
+          <div class="fuel-kpi">
+            <div class="fuel-kpi-val">${avgPricePerL > 0 ? avgPricePerL.toFixed(2)+'€' : '—'}</div>
+            <div class="fuel-kpi-lbl">prix moy/L</div>
+          </div>
+          <div class="fuel-kpi">
+            <div class="fuel-kpi-val">${s.totalLiters > 0 ? Math.round(s.totalLiters)+' L' : '—'}</div>
+            <div class="fuel-kpi-lbl">total consommé</div>
+          </div>
+          <div class="fuel-kpi">
+            <div class="fuel-kpi-val">${s.kmDriven > 0 && s.totalLiters > 0 ? (s.totalLiters / s.kmDriven * 100).toFixed(1)+'L' : '—'}</div>
+            <div class="fuel-kpi-lbl">aux 100 km</div>
+          </div>
+        </div>
+        <div style="margin-top:14px">
+          <div class="stat-card-sub" style="margin-bottom:8px">Litres enregistrés par année</div>
+          ${fuelBars}
+        </div>
+        ${lastFuelChips ? `<div style="margin-top:12px"><div class="stat-card-sub" style="margin-bottom:8px">Derniers pleins</div><div class="fuel-stations">${lastFuelChips}</div></div>` : ''}
+      </div>
+
+      <!-- Échéances -->
+      <div class="stat-card full">
+        <div class="stat-card-label">Échéances à venir</div>
+        <div class="deadlines-list">${deadlineRows}</div>
+        ${deadlineTotal3m > 0 ? `
+        <div class="deadline-total">
+          <span class="stat-card-sub">Total prévu dans les 3 prochains mois</span>
+          <span style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--text)">${fmtEur(deadlineTotal3m)}</span>
+        </div>` : ''}
+      </div>
+
+      <!-- Dépenses par année -->
       <div class="stat-card full">
         <div class="stat-card-label">Dépenses par année</div>
         <div class="bar-chart">${yearBars}</div>
       </div>
+
+      <!-- Répartition par type -->
       <div class="stat-card full">
         <div class="stat-card-label">Répartition par type</div>
         <div class="pie-legend">${typeRows}</div>
       </div>
+
     </div>`;
+}
+
+// ── Calcul des échéances prévisionnelles ────
+function _computeDeadlines(vehicle, stats, entries) {
+  const now = new Date();
+  const deadlines = [];
+
+  // Prochain entretien (basé sur km)
+  if (stats.nextService) {
+    const ns = stats.nextService;
+    const avgKmPerMonth = stats.kmDriven > 0 && vehicle.purchaseDate
+      ? stats.kmDriven / Math.max(1, (now.getFullYear() - new Date(vehicle.purchaseDate).getFullYear()) * 12 + now.getMonth() - new Date(vehicle.purchaseDate).getMonth())
+      : 0;
+    const monthsAway = avgKmPerMonth > 0 ? Math.round(ns.remaining / avgKmPerMonth) : null;
+    const lastCost = entries.filter(e => e.type === 'entretien' && e.cost > 0).sort((a,b) => new Date(b.date)-new Date(a.date))[0]?.cost || 0;
+    deadlines.push({
+      ico:'🔧', label:'Prochain entretien',
+      sub: ns.remaining <= 0 ? `Dépassé de ${fmt(Math.abs(ns.remaining))} km` : `Dans ${fmt(ns.remaining)} km`,
+      amount: lastCost || 300,
+      monthsAway: ns.remaining <= 0 ? 0 : monthsAway,
+      badgeTxt: 'km inconnus',
+      bg:'rgba(77,142,255,0.15)',
+    });
+  }
+
+  // Assurance (annuelle, basée sur la dernière)
+  const lastAssurance = entries.filter(e => e.type === 'assurance').sort((a,b) => new Date(b.date)-new Date(a.date))[0];
+  if (lastAssurance) {
+    const nextDate = new Date(lastAssurance.date);
+    nextDate.setFullYear(nextDate.getFullYear() + 1);
+    const monthsAway = Math.round((nextDate - now) / (1000 * 60 * 60 * 24 * 30));
+    deadlines.push({
+      ico:'📄', label:'Assurance annuelle',
+      sub:`Renouvellement · ${nextDate.toLocaleDateString('fr-BE',{month:'long',year:'numeric'})}`,
+      amount: lastAssurance.cost || 0,
+      monthsAway: Math.max(0, monthsAway),
+      badgeTxt:'',
+      bg:'rgba(32,208,112,0.15)',
+    });
+  }
+
+  // Taxe (annuelle, basée sur la dernière)
+  const lastTaxe = entries.filter(e => e.type === 'taxe').sort((a,b) => new Date(b.date)-new Date(a.date))[0];
+  if (lastTaxe) {
+    const nextDate = new Date(lastTaxe.date);
+    nextDate.setFullYear(nextDate.getFullYear() + 1);
+    const monthsAway = Math.round((nextDate - now) / (1000 * 60 * 60 * 24 * 30));
+    deadlines.push({
+      ico:'🏛️', label:'Taxe annuelle',
+      sub:`Renouvellement · ${nextDate.toLocaleDateString('fr-BE',{month:'long',year:'numeric'})}`,
+      amount: lastTaxe.cost || 0,
+      monthsAway: Math.max(0, monthsAway),
+      badgeTxt:'',
+      bg:'rgba(167,139,250,0.15)',
+    });
+  }
+
+  // Contrôle technique (tous les 2 ans en Belgique)
+  const lastControle = entries.filter(e => e.type === 'controle').sort((a,b) => new Date(b.date)-new Date(a.date))[0];
+  if (lastControle) {
+    const nextDate = new Date(lastControle.date);
+    nextDate.setFullYear(nextDate.getFullYear() + 2);
+    const monthsAway = Math.round((nextDate - now) / (1000 * 60 * 60 * 24 * 30));
+    deadlines.push({
+      ico:'✅', label:'Contrôle technique',
+      sub:`Renouvellement · ${nextDate.toLocaleDateString('fr-BE',{month:'long',year:'numeric'})}`,
+      amount: lastControle.cost || 0,
+      monthsAway: Math.max(0, monthsAway),
+      badgeTxt:'',
+      bg:'rgba(251,191,36,0.15)',
+    });
+  }
+
+  return deadlines.sort((a, b) => {
+    if (a.monthsAway === null) return 1;
+    if (b.monthsAway === null) return -1;
+    return a.monthsAway - b.monthsAway;
+  });
 }
 
 // ─── PHOTO UPLOAD ───────────────────────────

@@ -1,13 +1,13 @@
-const CACHE_NAME = 'mobiledev-v3';
+const CACHE_NAME = 'mobiledev-v4';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/app.js',
-  '/db.js',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png'
+  '/Mobile-Dev/',
+  '/Mobile-Dev/index.html',
+  '/Mobile-Dev/style.css',
+  '/Mobile-Dev/app.js',
+  '/Mobile-Dev/db.js',
+  '/Mobile-Dev/manifest.json',
+  '/Mobile-Dev/icon-192.png',
+  '/Mobile-Dev/icon-512.png'
 ];
 
 self.addEventListener('install', e => {

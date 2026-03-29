@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mobiledev-v5';
+const CACHE_NAME = 'mobiledev-v6';
 const ASSETS = [
   '/Mobile-Dev/',
   '/Mobile-Dev/index.html',

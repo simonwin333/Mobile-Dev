@@ -644,7 +644,7 @@ async function saveEntry() {
     provider:    isFuel ? '' : (document.getElementById('ef-provider')?.value.trim()||''),
     invoice:     isFuel ? '' : (document.getElementById('ef-invoice')?.value.trim()||''),
     notes:       document.getElementById('ef-notes').value.trim(),
-    liters:      isFuel ? (parseFloat(document.getElementById('ef-liters')?.value)||0) : undefined,
+    liters:      isFuel ? (parseFloat(document.getElementById('ef-liters')?.value)||0) : 0,
   };
 
   showLoader(true);

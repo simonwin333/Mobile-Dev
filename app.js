@@ -423,6 +423,40 @@ async function renderStats() {
   const totalMonthly = (s.totalOther + s.totalFuel) / monthsOwned;
   const maxMonthly = Math.max(...Object.values(byTypeMontly), 1);
 
+  // ── Calculs évolution annuelle (frais uniquement, hors carburant) ──
+  const fraisOnlyByYear = {};
+  entries.filter(e => e.type !== 'carburant').forEach(e => {
+    const y = e.date ? new Date(e.date).getFullYear() : null;
+    if (!y) return;
+    fraisOnlyByYear[y] = (fraisOnlyByYear[y] || 0) + (parseFloat(e.cost) || 0);
+  });
+  const evoYears = Object.keys(fraisOnlyByYear).sort((a, b) => a - b);
+  const currentYear = now.getFullYear();
+  // Extrapoler l'année en cours sur 12 mois
+  const fraisOnlyByYearExtrap = { ...fraisOnlyByYear };
+  if (fraisOnlyByYearExtrap[currentYear] !== undefined) {
+    const monthsPassed = now.getMonth() + 1;
+    fraisOnlyByYearExtrap[currentYear] = Math.round(fraisOnlyByYearExtrap[currentYear] / monthsPassed * 12);
+  }
+  const maxFrais = Math.max(...evoYears.map(y => fraisOnlyByYearExtrap[y] || 0), 1);
+  // Tendance globale : comparaison première vs dernière année complète
+  const fullYears = evoYears.filter(y => parseInt(y) < currentYear);
+  let tendance = null, tendancePct = null;
+  if (fullYears.length >= 2) {
+    const first = fraisOnlyByYear[fullYears[0]];
+    const last  = fraisOnlyByYear[fullYears[fullYears.length - 1]];
+    tendancePct = Math.round((last - first) / first * 100);
+    tendance = tendancePct > 0 ? 'up' : 'down';
+  }
+  // % évolution année vs précédente
+  const evoPct = {};
+  evoYears.forEach((y, i) => {
+    if (i === 0) { evoPct[y] = null; return; }
+    const prev = fraisOnlyByYear[evoYears[i - 1]];
+    const curr = fraisOnlyByYearExtrap[y];
+    evoPct[y] = prev > 0 ? Math.round((curr - prev) / prev * 100) : null;
+  });
+
   // ── Calculs carburant ──
   const fuelEntries = entries.filter(e => e.type === 'carburant' && e.liters > 0 && e.mileage > 0);
   // Conso aux 100 par année
@@ -558,6 +592,59 @@ async function renderStats() {
       <div class="bar-val">${fmtEur(s.byYear[y])}</div>
     </div>`).join('');
 
+  // ── Render courbe évolution (maquette 1) ──
+  const SVG_W = 300; const SVG_H = 110; const PAD_L = 28; const PAD_B = 20; const PAD_T = 14;
+  const plotW = SVG_W - PAD_L - 8; const plotH = SVG_H - PAD_B - PAD_T;
+  const evoPoints = evoYears.map((y, i) => {
+    const val = fraisOnlyByYearExtrap[y] || 0;
+    const x = PAD_L + (i / Math.max(evoYears.length - 1, 1)) * plotW;
+    const yPos = PAD_T + plotH - (val / maxFrais) * plotH;
+    return { x, y: yPos, val, year: y, isCurrent: parseInt(y) === currentYear };
+  });
+  const polyline = evoPoints.map(p => `${p.x},${p.y}`).join(' ');
+  const dotsSVG = evoPoints.map(p => `
+    <circle cx="${p.x}" cy="${p.y}" r="${p.isCurrent ? 5 : 3.5}"
+      fill="${p.isCurrent ? '#ff4757' : '#4d8eff'}" />
+    <text x="${p.x}" y="${p.y - 6}" font-size="8" text-anchor="middle"
+      fill="${p.isCurrent ? '#ff4757' : 'var(--muted2)'}" font-family="monospace">${fmtEur(p.val)}</text>
+    <text x="${p.x}" y="${SVG_H - 5}" font-size="8" text-anchor="middle"
+      fill="${p.isCurrent ? '#ff4757' : 'var(--muted2)'}">${p.year}</text>`).join('');
+  const tendanceBadge = tendance === 'up'
+    ? `<span class="evo-badge up">En hausse +${tendancePct}%</span>`
+    : tendance === 'down'
+    ? `<span class="evo-badge down">En baisse ${tendancePct}%</span>`
+    : '';
+  const tendanceMsg = tendance === 'up'
+    ? `Les frais augmentent depuis ${fullYears[0]} · tendance à surveiller`
+    : tendance === 'down'
+    ? `Les frais diminuent depuis ${fullYears[0]} · bonne nouvelle !`
+    : '';
+
+  // ── Render tableau année par année (maquette 2, frais uniquement) ──
+  const evoRows = evoYears.sort((a,b) => b - a).map(y => {
+    const val = fraisOnlyByYearExtrap[y] || 0;
+    const pct = evoPct[y];
+    const isCurrent = parseInt(y) === currentYear;
+    const barW = Math.round(val / maxFrais * 100);
+    let badgeHtml = '';
+    if (pct === null) badgeHtml = `<span class="evo-yr-badge muted">1ère année</span>`;
+    else if (pct > 0)  badgeHtml = `<span class="evo-yr-badge up">+${pct}%</span>`;
+    else               badgeHtml = `<span class="evo-yr-badge down">${pct}%</span>`;
+    return `<div class="evo-yr-row${isCurrent?' evo-current':''}">
+      <div class="evo-yr-label">${y}</div>
+      <div style="flex:1;min-width:0">
+        <div class="bar-track" style="height:6px">
+          <div class="bar-fill" style="width:${barW}%;background:${isCurrent?'#ff4757':'#4d8eff'}"></div>
+        </div>
+        ${isCurrent ? `<div style="font-size:10px;color:var(--muted2);margin-top:2px">en cours · extrapolé sur 12 mois</div>` : ''}
+      </div>
+      <div class="evo-yr-right">
+        <div class="evo-yr-val" style="color:${isCurrent?'#ff4757':'var(--text)'}">${fmtEur(val)}</div>
+        ${badgeHtml}
+      </div>
+    </div>`;
+  }).join('');
+
   wrap.innerHTML = `
     <div class="stats-grid">
 
@@ -582,6 +669,31 @@ async function renderStats() {
         <div class="stat-card-val">${fmtEur(s.totalAllInclPurchase)}</div>
         <div class="stat-card-sub">Tout inclus</div>
       </div>
+
+      <!-- Évolution courbe -->
+      ${evoYears.length >= 2 ? `
+      <div class="stat-card full">
+        <div class="stat-card-label" style="display:flex;align-items:center;gap:8px;justify-content:space-between">
+          <span>Évolution des frais (hors carburant)</span>
+          ${tendanceBadge}
+        </div>
+        <svg viewBox="0 0 ${SVG_W} ${SVG_H}" width="100%" style="margin-top:8px;overflow:visible">
+          <line x1="${PAD_L}" y1="${PAD_T}" x2="${PAD_L}" y2="${PAD_T+plotH}" stroke="var(--border)" stroke-width="1"/>
+          <line x1="${PAD_L}" y1="${PAD_T+plotH}" x2="${SVG_W-8}" y2="${PAD_T+plotH}" stroke="var(--border)" stroke-width="1"/>
+          <line x1="${PAD_L}" y1="${PAD_T + plotH*0.33}" x2="${SVG_W-8}" y2="${PAD_T + plotH*0.33}" stroke="var(--border)" stroke-width="0.5" stroke-dasharray="3,3"/>
+          <line x1="${PAD_L}" y1="${PAD_T + plotH*0.66}" x2="${SVG_W-8}" y2="${PAD_T + plotH*0.66}" stroke="var(--border)" stroke-width="0.5" stroke-dasharray="3,3"/>
+          <polyline points="${polyline}" fill="none" stroke="#4d8eff" stroke-width="2" stroke-linejoin="round"/>
+          ${dotsSVG}
+        </svg>
+        ${tendanceMsg ? `<div class="evo-msg">${tendanceMsg}</div>` : ''}
+      </div>` : ''}
+
+      <!-- Évolution année par année -->
+      ${evoYears.length >= 1 ? `
+      <div class="stat-card full">
+        <div class="stat-card-label">Frais par année · hors carburant</div>
+        <div class="evo-yr-list">${evoRows}</div>
+      </div>` : ''}
 
       <!-- Coût mensuel moyen -->
       <div class="stat-card full">

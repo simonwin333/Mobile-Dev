@@ -609,22 +609,33 @@ async function renderStats() {
     </div>`).join('');
 
   // ── Render courbe évolution (maquette 1) ──
-  const SVG_W = 300; const SVG_H = 110; const PAD_L = 28; const PAD_B = 20; const PAD_T = 14;
+  const SVG_W = 300; const SVG_H = 120; const PAD_L = 28; const PAD_B = 28; const PAD_T = 14;
   const plotW = SVG_W - PAD_L - 8; const plotH = SVG_H - PAD_B - PAD_T;
+  const firstYearInt = evoYears.length > 0 ? parseInt(evoYears[0]) : null;
   const evoPoints = evoYears.map((y, i) => {
     const val = fraisOnlyByYearExtrap[y] || 0;
     const x = PAD_L + (i / Math.max(evoYears.length - 1, 1)) * plotW;
     const yPos = PAD_T + plotH - (val / maxFrais) * plotH;
-    return { x, y: yPos, val, year: y, isCurrent: parseInt(y) === currentYear };
+    const isCurrent = parseInt(y) === currentYear;
+    const isExtrapol = isCurrent || (parseInt(y) === firstYearInt && purchaseDate && purchaseDate.getMonth() > 0);
+    return { x, y: yPos, val, year: y, isCurrent, isExtrapol };
   });
   const polyline = evoPoints.map(p => `${p.x},${p.y}`).join(' ');
-  const dotsSVG = evoPoints.map(p => `
-    <circle cx="${p.x}" cy="${p.y}" r="${p.isCurrent ? 5 : 3.5}"
-      fill="${p.isCurrent ? '#ff4757' : '#4d8eff'}" />
-    <text x="${p.x}" y="${p.y - 6}" font-size="8" text-anchor="middle"
-      fill="${p.isCurrent ? '#ff4757' : 'var(--muted2)'}" font-family="monospace">${fmtEur(p.val)}</text>
-    <text x="${p.x}" y="${SVG_H - 5}" font-size="8" text-anchor="middle"
-      fill="${p.isCurrent ? '#ff4757' : 'var(--muted2)'}">${p.year}</text>`).join('');
+  const dotsSVG = evoPoints.map(p => {
+    const color = p.isCurrent ? '#ff4757' : '#4d8eff';
+    const labelColor = p.isCurrent ? '#ff4757' : 'var(--muted2)';
+    // Cercle plein ou creux selon si extrapolé
+    const dot = p.isExtrapol
+      ? `<circle cx="${p.x}" cy="${p.y}" r="${p.isCurrent?5:3.5}" fill="var(--surface)" stroke="${color}" stroke-width="1.5" stroke-dasharray="3,2"/>`
+      : `<circle cx="${p.x}" cy="${p.y}" r="${p.isCurrent?5:3.5}" fill="${color}"/>`;
+    const yearLabel = p.isExtrapol
+      ? `<text x="${p.x}" y="${SVG_H - 14}" font-size="8" text-anchor="middle" fill="${labelColor}">${p.year}</text>
+         <text x="${p.x}" y="${SVG_H - 5}" font-size="7" text-anchor="middle" fill="var(--muted)" font-style="italic">extrap.</text>`
+      : `<text x="${p.x}" y="${SVG_H - 5}" font-size="8" text-anchor="middle" fill="${labelColor}">${p.year}</text>`;
+    return `${dot}
+    <text x="${p.x}" y="${p.y - 6}" font-size="8" text-anchor="middle" fill="${labelColor}" font-family="monospace">${fmtEur(p.val)}</text>
+    ${yearLabel}`;
+  }).join('');
   const tendanceBadge = tendance === 'up'
     ? `<span class="evo-badge up">En hausse +${tendancePct}%</span>`
     : tendance === 'down'
@@ -705,13 +716,6 @@ async function renderStats() {
           ${dotsSVG}
         </svg>
         ${tendanceMsg ? `<div class="evo-msg">${tendanceMsg}</div>` : ''}
-      </div>` : ''}
-
-      <!-- Évolution année par année -->
-      ${evoYears.length >= 1 ? `
-      <div class="stat-card full">
-        <div class="stat-card-label">Frais par année · hors carburant</div>
-        <div class="evo-yr-list">${evoRows}</div>
       </div>` : ''}
 
       <!-- Coût mensuel moyen -->

@@ -432,27 +432,43 @@ async function renderStats() {
   });
   const evoYears = Object.keys(fraisOnlyByYear).sort((a, b) => a - b);
   const currentYear = now.getFullYear();
-  // Extrapoler l'année en cours sur 12 mois
+
+  // Extrapoler les années incomplètes sur 12 mois pour comparer équitablement
   const fraisOnlyByYearExtrap = { ...fraisOnlyByYear };
+
+  // Première année : peut être incomplète si achat en cours d'année
+  if (evoYears.length > 0 && purchaseDate) {
+    const firstYear = parseInt(evoYears[0]);
+    const purchaseMonth = purchaseDate.getMonth(); // 0 = janvier
+    const monthsInFirstYear = 12 - purchaseMonth;  // mois restants dans l'année d'achat
+    if (monthsInFirstYear < 12) {
+      fraisOnlyByYearExtrap[firstYear] = Math.round(fraisOnlyByYear[firstYear] / monthsInFirstYear * 12);
+    }
+  }
+
+  // Année en cours : extrapoler sur 12 mois
   if (fraisOnlyByYearExtrap[currentYear] !== undefined) {
     const monthsPassed = now.getMonth() + 1;
-    fraisOnlyByYearExtrap[currentYear] = Math.round(fraisOnlyByYearExtrap[currentYear] / monthsPassed * 12);
+    fraisOnlyByYearExtrap[currentYear] = Math.round(fraisOnlyByYear[currentYear] / monthsPassed * 12);
   }
+
   const maxFrais = Math.max(...evoYears.map(y => fraisOnlyByYearExtrap[y] || 0), 1);
-  // Tendance globale : comparaison première vs dernière année complète
+
+  // Tendance globale : comparaison première vs dernière année complète (valeurs extrapolées)
   const fullYears = evoYears.filter(y => parseInt(y) < currentYear);
   let tendance = null, tendancePct = null;
   if (fullYears.length >= 2) {
-    const first = fraisOnlyByYear[fullYears[0]];
-    const last  = fraisOnlyByYear[fullYears[fullYears.length - 1]];
+    const first = fraisOnlyByYearExtrap[fullYears[0]];
+    const last  = fraisOnlyByYearExtrap[fullYears[fullYears.length - 1]];
     tendancePct = Math.round((last - first) / first * 100);
     tendance = tendancePct > 0 ? 'up' : 'down';
   }
-  // % évolution année vs précédente
+
+  // % évolution année vs précédente (toujours sur valeurs extrapolées)
   const evoPct = {};
   evoYears.forEach((y, i) => {
     if (i === 0) { evoPct[y] = null; return; }
-    const prev = fraisOnlyByYear[evoYears[i - 1]];
+    const prev = fraisOnlyByYearExtrap[evoYears[i - 1]];
     const curr = fraisOnlyByYearExtrap[y];
     evoPct[y] = prev > 0 ? Math.round((curr - prev) / prev * 100) : null;
   });
@@ -621,10 +637,13 @@ async function renderStats() {
     : '';
 
   // ── Render tableau année par année (maquette 2, frais uniquement) ──
-  const evoRows = evoYears.sort((a,b) => b - a).map(y => {
+  const firstYear = evoYears.length > 0 ? parseInt(evoYears[0]) : null;
+  const evoRows = evoYears.slice().sort((a,b) => b - a).map(y => {
     const val = fraisOnlyByYearExtrap[y] || 0;
     const pct = evoPct[y];
-    const isCurrent = parseInt(y) === currentYear;
+    const isCurrent  = parseInt(y) === currentYear;
+    const isFirst    = parseInt(y) === firstYear;
+    const isExtrapol = isCurrent || (isFirst && purchaseDate && purchaseDate.getMonth() > 0);
     const barW = Math.round(val / maxFrais * 100);
     let badgeHtml = '';
     if (pct === null) badgeHtml = `<span class="evo-yr-badge muted">1ère année</span>`;
@@ -636,7 +655,7 @@ async function renderStats() {
         <div class="bar-track" style="height:6px">
           <div class="bar-fill" style="width:${barW}%;background:${isCurrent?'#ff4757':'#4d8eff'}"></div>
         </div>
-        ${isCurrent ? `<div style="font-size:10px;color:var(--muted2);margin-top:2px">en cours · extrapolé sur 12 mois</div>` : ''}
+        ${isExtrapol ? `<div style="font-size:10px;color:var(--muted2);margin-top:2px">extrapolé sur 12 mois</div>` : ''}
       </div>
       <div class="evo-yr-right">
         <div class="evo-yr-val" style="color:${isCurrent?'#ff4757':'var(--text)'}">${fmtEur(val)}</div>
@@ -1223,24 +1242,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const newWorker = reg.installing;
         newWorker.addEventListener('statechange', () => {
           if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            // Nouvelle version prête → afficher la bannière
             document.getElementById('update-banner').classList.add('show');
-            window._pendingWorker = newWorker;
           }
         });
       });
     }).catch(() => {});
+
+    // Si le SW a changé entre deux visites → recharger automatiquement
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) { refreshing = true; window.location.reload(); }
+    });
   }
 });
 
 // ─── MISE À JOUR ────────────────────────────
-function applyUpdate() {
-  if (window._pendingWorker) {
-    window._pendingWorker.postMessage('SKIP_WAITING');
-  }
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
+async function applyUpdate() {
+  const reg = await navigator.serviceWorker.getRegistration();
+  if (reg?.waiting) {
+    reg.waiting.postMessage('SKIP_WAITING');
+  } else {
     window.location.reload();
-  });
+  }
 }
 
 // Exposer les fonctions au HTML
